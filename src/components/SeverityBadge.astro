@@ -1,0 +1,27 @@
+---
+interface Props {
+  severity: 'Critical' | 'High' | 'Medium' | 'Low' | 'Informational';
+  size?: 'sm' | 'md';
+}
+
+const { severity, size = 'sm' } = Astro.props;
+
+const colors: Record<string, string> = {
+  Critical: 'border-red-900 bg-red-950/40 text-red-300',
+  High: 'border-orange-900 bg-orange-950/40 text-orange-300',
+  Medium: 'border-yellow-900 bg-yellow-950/40 text-yellow-300',
+  Low: 'border-blue-900 bg-blue-950/40 text-blue-300',
+  Informational: 'border-zinc-700 bg-zinc-900/60 text-zinc-400',
+};
+
+const sizes = {
+  sm: 'text-[0.65rem] px-1.5 py-0.5',
+  md: 'text-xs px-2 py-1',
+};
+---
+
+<span
+  class={`inline-flex items-center font-mono font-semibold uppercase tracking-wider border rounded ${colors[severity]} ${sizes[size]}`}
+>
+  {severity}
+</span>

@@ -1,0 +1,192 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import WriteupCard from '../components/WriteupCard.astro';
+import { getCollection } from 'astro:content';
+
+const writeups = (await getCollection('writeups', ({ data }) => !data.draft)).sort(
+  (a, b) => (a.data.order ?? 100) - (b.data.order ?? 100),
+);
+const critCount = writeups.filter((w) => w.data.severity === 'Critical').length;
+const highCount = writeups.filter((w) => w.data.severity === 'High').length;
+---
+
+<BaseLayout title="moizxsec — Abdul Moiz">
+  <div class="max-w-6xl mx-auto px-6 pt-16 pb-16">
+    <div class="grid grid-cols-1 lg:grid-cols-[200px_1fr_240px] gap-10">
+      <!-- LEFT RAIL — identity -->
+      <aside class="lg:sticky lg:top-24 lg:self-start space-y-4 order-2 lg:order-1">
+        <div class="border border-zinc-900 rounded-md overflow-hidden">
+          <div class="aspect-square bg-gradient-to-br from-zinc-900 via-zinc-950 to-zinc-900 flex items-center justify-center border-b border-zinc-900">
+            <div class="font-mono font-semibold text-4xl text-zinc-50 tracking-tight">
+              <span>AM</span><span class="text-orange-500">.</span>
+            </div>
+          </div>
+          <div class="p-4">
+            <div class="text-sm text-zinc-50 font-semibold mb-0.5">Abdul Moiz</div>
+            <div class="text-xs font-mono text-zinc-500 mb-3">moizxsec</div>
+            <div class="text-xs text-zinc-400 leading-relaxed mb-3">
+              Offensive security engineer
+            </div>
+            <div class="text-[0.65rem] font-mono uppercase tracking-widest text-zinc-600">
+              Lahore, PK
+            </div>
+          </div>
+        </div>
+
+        <div class="border border-zinc-900 rounded-md p-4">
+          <div class="text-[0.65rem] font-mono uppercase tracking-widest text-zinc-600 mb-3">
+            Links
+          </div>
+          <ul class="text-xs space-y-2">
+            <li>
+              <a
+                href="/writeups"
+                class="text-zinc-300 hover:text-zinc-50 transition-colors"
+                >→ Writeups</a
+              >
+            </li>
+            <li>
+              <a
+                href="/about"
+                class="text-zinc-300 hover:text-zinc-50 transition-colors"
+                >→ About</a
+              >
+            </li>
+            <li>
+              <a
+                href="https://github.com/moizxsec"
+                target="_blank"
+                rel="noopener"
+                class="text-zinc-300 hover:text-zinc-50 transition-colors"
+                >→ GitHub</a
+              >
+            </li>
+            <li>
+              <a
+                href="/rss.xml"
+                class="text-zinc-300 hover:text-zinc-50 transition-colors"
+                >→ RSS</a
+              >
+            </li>
+            <li>
+              <a
+                href="mailto:muezzism@gmail.com"
+                class="text-zinc-300 hover:text-zinc-50 transition-colors break-all"
+                >→ Email</a
+              >
+            </li>
+          </ul>
+        </div>
+
+        <div class="border border-zinc-900 rounded-md p-4">
+          <div class="text-[0.65rem] font-mono uppercase tracking-widest text-zinc-600 mb-3">
+            Disclosed
+          </div>
+          <ul class="text-xs space-y-2.5 font-mono">
+            <li>
+              <div class="text-zinc-300">FileGator</div>
+              <div class="text-zinc-600 text-[0.7rem]">v7.14.2 changelog</div>
+            </li>
+            <li>
+              <div class="text-zinc-300">starlette</div>
+              <div class="text-zinc-600 text-[0.7rem]">GHSA-cm5j-qvph-7x6w</div>
+            </li>
+          </ul>
+        </div>
+      </aside>
+
+      <!-- MIDDLE — bio + writeups -->
+      <section class="min-w-0 order-1 lg:order-2">
+        <h1 class="text-3xl sm:text-4xl font-semibold text-zinc-50 tracking-tight leading-tight mb-4">
+          Abdul Moiz
+        </h1>
+        <p class="text-zinc-400 text-base leading-relaxed mb-12 max-w-2xl">
+          Offensive security engineer. I find ways to break web applications, identity
+          providers, cloud platforms, and the chains that hold them together — then I help
+          fix them. Currently shipping AI-assisted application security at a HIPAA /
+          SOC&nbsp;2 healthcare platform; on the side, I disclose vulnerabilities in
+          open-source software.
+        </p>
+
+        <div class="flex items-baseline justify-between mb-2 border-b border-zinc-900 pb-3">
+          <h2 class="text-xs font-mono text-zinc-500 uppercase tracking-widest">
+            Latest Writeups
+          </h2>
+          <a
+            href="/writeups"
+            class="text-xs font-mono text-zinc-500 hover:text-zinc-200 transition-colors"
+            >view all →</a
+          >
+        </div>
+        {
+          writeups.slice(0, 6).map((w) => (
+            <WriteupCard
+              slug={w.slug}
+              title={w.data.title}
+              summary={w.data.summary}
+              date={w.data.date}
+              severity={w.data.severity}
+              cvss={w.data.cvss}
+              product={w.data.product}
+              tags={w.data.tags}
+              type={w.data.type}
+              readingTime={w.data.readingTime}
+              featured={w.data.featured}
+            />
+          ))
+        }
+      </section>
+
+      <!-- RIGHT RAIL — currently + focus + stats -->
+      <aside class="lg:sticky lg:top-24 lg:self-start space-y-4 order-3">
+        <div class="border border-zinc-900 rounded-md p-4">
+          <div class="text-[0.65rem] font-mono uppercase tracking-widest text-zinc-600 mb-3">
+            Currently
+          </div>
+          <div class="text-sm text-zinc-200 leading-relaxed mb-1">
+            Application Security Engineer
+          </div>
+          <div class="text-xs text-zinc-500 leading-relaxed">
+            HIPAA / SOC&nbsp;2 healthcare SaaS
+          </div>
+        </div>
+
+        <div class="border border-zinc-900 rounded-md p-4">
+          <div class="text-[0.65rem] font-mono uppercase tracking-widest text-zinc-600 mb-3">
+            Focus
+          </div>
+          <ul class="text-xs text-zinc-300 leading-relaxed space-y-1.5">
+            <li>Web · API · Active Directory</li>
+            <li>Cloud identity · SAML · OAuth</li>
+            <li>AWS WAF · Entra ID · Firebase</li>
+            <li>LLM security · multi-agent CI</li>
+          </ul>
+        </div>
+
+        <div class="border border-zinc-900 rounded-md p-4">
+          <div class="text-[0.65rem] font-mono uppercase tracking-widest text-zinc-600 mb-3">
+            Stats
+          </div>
+          <dl class="text-xs font-mono space-y-2">
+            <div class="flex justify-between">
+              <dt class="text-zinc-500">Writeups</dt>
+              <dd class="text-zinc-200">{writeups.length}</dd>
+            </div>
+            <div class="flex justify-between">
+              <dt class="text-zinc-500">Critical</dt>
+              <dd class="text-zinc-200">{critCount}</dd>
+            </div>
+            <div class="flex justify-between">
+              <dt class="text-zinc-500">High</dt>
+              <dd class="text-zinc-200">{highCount}</dd>
+            </div>
+            <div class="flex justify-between">
+              <dt class="text-zinc-500">Credits</dt>
+              <dd class="text-zinc-200">2</dd>
+            </div>
+          </dl>
+        </div>
+      </aside>
+    </div>
+  </div>
+</BaseLayout>

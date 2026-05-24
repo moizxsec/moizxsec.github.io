@@ -1,0 +1,246 @@
+---
+import BaseLayout from './BaseLayout.astro';
+import SeverityBadge from '../components/SeverityBadge.astro';
+import RelatedWriteups from '../components/RelatedWriteups.astro';
+
+interface Props {
+  title: string;
+  summary: string;
+  date: Date;
+  severity: 'Critical' | 'High' | 'Medium' | 'Low' | 'Informational';
+  cvss?: number;
+  cve?: string;
+  ghsa?: string;
+  cwe?: string;
+  product: string;
+  version?: string;
+  vendor?: string;
+  status: string;
+  tags: string[];
+  advisory?: string;
+  type?: 'Disclosure' | 'Research' | 'Class' | 'Architecture' | 'Incident Response';
+  readingTime?: number;
+  featured?: boolean;
+}
+
+const props = Astro.props;
+const dateStr = props.date.toISOString().slice(0, 10);
+---
+
+<BaseLayout title={`${props.title} — moizxsec`} description={props.summary}>
+  <div class="reading-progress" id="reading-progress" style="width: 0%"></div>
+  <script>
+    (() => {
+      const bar = document.getElementById('reading-progress');
+      const article = document.getElementById('writeup-content');
+      if (!bar || !article) return;
+      const update = () => {
+        const rect = article.getBoundingClientRect();
+        const total = article.scrollHeight - window.innerHeight;
+        const progress = Math.max(0, Math.min(100, ((-rect.top) / total) * 100));
+        bar.style.width = `${progress}%`;
+      };
+      window.addEventListener('scroll', update, { passive: true });
+      window.addEventListener('resize', update);
+      update();
+    })();
+  </script>
+  <div class="max-w-6xl mx-auto px-6 py-12">
+    <a
+      href="/writeups"
+      class="inline-block text-xs font-mono text-zinc-500 hover:text-zinc-300 mb-8 transition-colors"
+    >
+      ← all writeups
+    </a>
+
+    <div class="grid grid-cols-1 lg:grid-cols-[1fr_240px] gap-12">
+      <article class="min-w-0">
+        <header class="mb-10 pb-8 border-b border-zinc-900">
+          <div class="flex items-center gap-3 mb-4 text-xs font-mono text-zinc-500 flex-wrap">
+            <time datetime={dateStr}>{dateStr}</time>
+            <span class="text-zinc-800">·</span>
+            <SeverityBadge severity={props.severity} />
+            {
+              props.cvss && (
+                <>
+                  <span class="text-zinc-800">·</span>
+                  <span class="text-zinc-400">CVSS {props.cvss.toFixed(1)}</span>
+                </>
+              )
+            }
+            {
+              props.type && (
+                <>
+                  <span class="text-zinc-800">·</span>
+                  <span class="text-[0.65rem] font-mono uppercase tracking-wider text-zinc-400 border border-zinc-800 rounded px-1.5 py-0.5">
+                    {props.type}
+                  </span>
+                </>
+              )
+            }
+            {
+              props.readingTime && (
+                <>
+                  <span class="text-zinc-800">·</span>
+                  <span class="text-zinc-400">{props.readingTime} min read</span>
+                </>
+              )
+            }
+            {
+              props.featured && (
+                <>
+                  <span class="text-zinc-800">·</span>
+                  <span class="text-orange-400">★ featured</span>
+                </>
+              )
+            }
+          </div>
+          <h1 class="text-3xl sm:text-4xl font-semibold text-zinc-50 leading-tight tracking-tight mb-4">
+            {props.title}
+          </h1>
+          <p class="text-zinc-400 text-base leading-relaxed">{props.summary}</p>
+        </header>
+
+        <div class="writeup-prose" id="writeup-content">
+          <slot />
+        </div>
+
+        <RelatedWriteups currentSlug={Astro.params.slug || ''} tags={props.tags} />
+
+        <hr class="border-zinc-900 my-12" />
+
+        <div class="text-xs font-mono text-zinc-500 leading-relaxed">
+          <p class="mb-2">
+            Found a mistake or want to discuss this research?
+            <a
+              href="mailto:muezzism@gmail.com"
+              class="text-zinc-300 underline decoration-zinc-700 underline-offset-2 hover:decoration-orange-500"
+              >Email</a
+            >.
+          </p>
+          <p>
+            All research conducted under authorisation or responsible-disclosure policy. Client identifiers redacted where applicable.
+          </p>
+        </div>
+      </article>
+
+      <aside class="lg:sticky lg:top-24 lg:self-start">
+        <div class="border border-zinc-900 rounded-md p-4 mb-4">
+          <div class="text-[0.65rem] font-mono uppercase tracking-widest text-zinc-600 mb-3">
+            Metadata
+          </div>
+          <dl class="space-y-2.5 text-xs font-mono">
+            <div class="flex justify-between gap-2">
+              <dt class="text-zinc-500">Severity</dt>
+              <dd><SeverityBadge severity={props.severity} /></dd>
+            </div>
+            {
+              props.cvss && (
+                <div class="flex justify-between gap-2">
+                  <dt class="text-zinc-500">CVSS</dt>
+                  <dd class="text-zinc-200">{props.cvss.toFixed(1)}</dd>
+                </div>
+              )
+            }
+            {
+              props.cwe && (
+                <div class="flex justify-between gap-2">
+                  <dt class="text-zinc-500">CWE</dt>
+                  <dd class="text-zinc-200">{props.cwe}</dd>
+                </div>
+              )
+            }
+            <div class="flex justify-between gap-2">
+              <dt class="text-zinc-500">Status</dt>
+              <dd class="text-zinc-200">{props.status}</dd>
+            </div>
+            <div class="flex justify-between gap-2">
+              <dt class="text-zinc-500">Date</dt>
+              <dd class="text-zinc-200">{dateStr}</dd>
+            </div>
+          </dl>
+        </div>
+
+        <div class="border border-zinc-900 rounded-md p-4 mb-4">
+          <div class="text-[0.65rem] font-mono uppercase tracking-widest text-zinc-600 mb-3">
+            Affected
+          </div>
+          <dl class="space-y-2.5 text-xs font-mono">
+            <div>
+              <dt class="text-zinc-500 mb-1">Product</dt>
+              <dd class="text-zinc-200 break-words">{props.product}</dd>
+            </div>
+            {
+              props.version && (
+                <div>
+                  <dt class="text-zinc-500 mb-1">Version</dt>
+                  <dd class="text-zinc-200 break-words">{props.version}</dd>
+                </div>
+              )
+            }
+            {
+              props.vendor && (
+                <div>
+                  <dt class="text-zinc-500 mb-1">Vendor</dt>
+                  <dd class="text-zinc-200 break-words">{props.vendor}</dd>
+                </div>
+              )
+            }
+          </dl>
+        </div>
+
+        {(props.ghsa || props.cve || props.advisory) && (
+          <div class="border border-zinc-900 rounded-md p-4 mb-4">
+            <div class="text-[0.65rem] font-mono uppercase tracking-widest text-zinc-600 mb-3">
+              References
+            </div>
+            <dl class="space-y-2.5 text-xs font-mono">
+              {props.ghsa && (
+                <div>
+                  <dt class="text-zinc-500 mb-1">GHSA</dt>
+                  <dd class="text-zinc-200 break-all">{props.ghsa}</dd>
+                </div>
+              )}
+              {props.cve && (
+                <div>
+                  <dt class="text-zinc-500 mb-1">CVE</dt>
+                  <dd class="text-zinc-200">{props.cve}</dd>
+                </div>
+              )}
+              {props.advisory && (
+                <div>
+                  <dt class="text-zinc-500 mb-1">Advisory</dt>
+                  <dd>
+                    <a
+                      href={props.advisory}
+                      target="_blank"
+                      rel="noopener"
+                      class="text-zinc-200 underline decoration-zinc-700 underline-offset-2 hover:decoration-orange-500 break-all"
+                    >
+                      open ↗
+                    </a>
+                  </dd>
+                </div>
+              )}
+            </dl>
+          </div>
+        )}
+
+        {props.tags.length > 0 && (
+          <div class="border border-zinc-900 rounded-md p-4">
+            <div class="text-[0.65rem] font-mono uppercase tracking-widest text-zinc-600 mb-3">
+              Tags
+            </div>
+            <div class="flex flex-wrap gap-1.5">
+              {props.tags.map((tag) => (
+                <span class="text-[0.65rem] font-mono uppercase tracking-wider text-zinc-400 border border-zinc-800 rounded px-1.5 py-0.5">
+                  {tag}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+      </aside>
+    </div>
+  </div>
+</BaseLayout>

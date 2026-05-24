@@ -1,0 +1,84 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import WriteupCard from '../../components/WriteupCard.astro';
+import { getCollection } from 'astro:content';
+
+const writeups = (await getCollection('writeups', ({ data }) => !data.draft)).sort(
+  (a, b) => (a.data.order ?? 100) - (b.data.order ?? 100),
+);
+
+const tagCounts = new Map<string, number>();
+for (const w of writeups) {
+  for (const t of w.data.tags) tagCounts.set(t, (tagCounts.get(t) ?? 0) + 1);
+}
+const topTags = [...tagCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 12);
+---
+
+<BaseLayout
+  title="Writeups — moizxsec"
+  description="Vulnerability disclosures and offensive security research writeups by Abdul Moiz."
+>
+  <div class="max-w-6xl mx-auto px-6 pt-16 pb-12">
+    <div class="grid grid-cols-1 lg:grid-cols-[1fr_240px] gap-12">
+      <section class="min-w-0">
+        <h1 class="text-2xl font-semibold text-zinc-50 tracking-tight mb-3">Writeups</h1>
+        <p class="text-zinc-400 text-sm leading-relaxed max-w-2xl mb-10">
+          Public vulnerability research, disclosure writeups, and class-of-vuln deep dives.
+          Client identifiers from confidential engagements are redacted; technical substance
+          is preserved.
+        </p>
+        {
+          writeups.map((w) => (
+            <WriteupCard
+              slug={w.slug}
+              title={w.data.title}
+              summary={w.data.summary}
+              date={w.data.date}
+              severity={w.data.severity}
+              cvss={w.data.cvss}
+              product={w.data.product}
+              tags={w.data.tags}
+              type={w.data.type}
+              readingTime={w.data.readingTime}
+              featured={w.data.featured}
+            />
+          ))
+        }
+      </section>
+
+      <aside class="lg:sticky lg:top-24 lg:self-start space-y-4">
+        <div class="border border-zinc-900 rounded-md p-4">
+          <div class="text-[0.65rem] font-mono uppercase tracking-widest text-zinc-600 mb-3">
+            Filter
+          </div>
+          <div class="flex flex-wrap gap-1.5">
+            {
+              topTags.map(([tag, n]) => (
+                <span class="text-[0.65rem] font-mono uppercase tracking-wider text-zinc-400 border border-zinc-800 rounded px-1.5 py-0.5">
+                  {tag} <span class="text-zinc-600">{n}</span>
+                </span>
+              ))
+            }
+          </div>
+        </div>
+
+        <div class="border border-zinc-900 rounded-md p-4">
+          <div class="text-[0.65rem] font-mono uppercase tracking-widest text-zinc-600 mb-3">
+            Disclosure Policy
+          </div>
+          <p class="text-xs text-zinc-400 leading-relaxed">
+            90-day coordinated disclosure window from vendor acknowledgement. Confidential
+            engagements never reveal client identifiers — the technical class is what
+            travels.
+          </p>
+          <a
+            href="/about"
+            class="inline-block mt-3 text-xs font-mono text-zinc-300 underline decoration-zinc-700 underline-offset-2 hover:decoration-orange-500"
+          >
+            full policy →
+          </a>
+        </div>
+      </aside>
+    </div>
+  </div>
+</BaseLayout>

@@ -1,0 +1,37 @@
+---
+import { getCollection } from 'astro:content';
+import WriteupLayout from '../../layouts/WriteupLayout.astro';
+
+export async function getStaticPaths() {
+  const writeups = await getCollection('writeups', ({ data }) => !data.draft);
+  return writeups.map((w) => ({
+    params: { slug: w.slug },
+    props: { entry: w },
+  }));
+}
+
+const { entry } = Astro.props;
+const { Content } = await entry.render();
+---
+
+<WriteupLayout
+  title={entry.data.title}
+  summary={entry.data.summary}
+  date={entry.data.date}
+  severity={entry.data.severity}
+  cvss={entry.data.cvss}
+  cve={entry.data.cve}
+  ghsa={entry.data.ghsa}
+  cwe={entry.data.cwe}
+  product={entry.data.product}
+  version={entry.data.version}
+  vendor={entry.data.vendor}
+  status={entry.data.status}
+  tags={entry.data.tags}
+  advisory={entry.data.advisory}
+  type={entry.data.type}
+  readingTime={entry.data.readingTime}
+  featured={entry.data.featured}
+>
+  <Content />
+</WriteupLayout>

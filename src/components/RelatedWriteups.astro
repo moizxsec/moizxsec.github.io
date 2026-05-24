@@ -1,0 +1,52 @@
+---
+import SeverityBadge from './SeverityBadge.astro';
+import { getCollection } from 'astro:content';
+
+interface Props {
+  currentSlug: string;
+  tags: string[];
+}
+
+const { currentSlug, tags } = Astro.props;
+
+const all = await getCollection('writeups', ({ data }) => !data.draft);
+const ranked = all
+  .filter((w) => w.slug !== currentSlug)
+  .map((w) => ({
+    entry: w,
+    score: w.data.tags.filter((t) => tags.includes(t)).length,
+  }))
+  .sort((a, b) => b.score - a.score || (a.entry.data.order ?? 100) - (b.entry.data.order ?? 100));
+
+const related = ranked.slice(0, 3).map((r) => r.entry);
+---
+
+{
+  related.length > 0 && (
+    <section class="border-t border-zinc-900 pt-8 mt-12">
+      <div class="text-[0.65rem] font-mono uppercase tracking-widest text-zinc-600 mb-4">
+        Related writeups
+      </div>
+      <ul class="space-y-3">
+        {related.map((w) => (
+          <li>
+            <a
+              href={`/writeups/${w.slug}`}
+              class="flex items-baseline gap-3 group text-sm"
+            >
+              <span class="text-xs font-mono text-zinc-600 shrink-0 w-20">
+                {w.data.date.toISOString().slice(0, 10)}
+              </span>
+              <span class="text-zinc-300 group-hover:text-orange-300 transition-colors flex-1">
+                {w.data.title}
+              </span>
+              <span class="shrink-0">
+                <SeverityBadge severity={w.data.severity} />
+              </span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}

