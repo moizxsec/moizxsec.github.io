@@ -64,6 +64,7 @@ pre.astro-code {
 
 /* Inline code */
 :not(pre) > code {
+  word-break: break-word;
   background: #1f1f23;
   border: 1px solid #2a2a2f;
   border-radius: 4px;
@@ -176,6 +177,16 @@ pre.astro-code {
   border-collapse: collapse;
   margin: 1.5rem 0;
   font-size: 0.9375rem;
+  display: block;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+@media (min-width: 768px) {
+  .writeup-prose table {
+    display: table;
+    white-space: normal;
+  }
 }
 
 .writeup-prose th,
@@ -214,6 +225,15 @@ pre.astro-code {
 .writeup-prose h3:hover a.heading-anchor,
 .writeup-prose h4:hover a.heading-anchor {
   opacity: 1;
+}
+
+/* Touch devices have no hover — keep anchors permanently visible */
+@media (hover: none) {
+  .writeup-prose h2 a.heading-anchor,
+  .writeup-prose h3 a.heading-anchor,
+  .writeup-prose h4 a.heading-anchor {
+    opacity: 0.5;
+  }
 }
 
 .writeup-prose h2 a.heading-anchor:hover,
