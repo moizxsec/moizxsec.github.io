@@ -6,7 +6,7 @@ severity: Critical
 product: "npm registry / Node.js supply chain"
 status: "Public"
 tags: ["incident-response", "supply-chain", "npm", "lazarus", "blueNoroff", "blue-team"]
-order: 9
+order: 12
 featured: false
 type: "Incident Response"
 readingTime: 10
@@ -48,7 +48,7 @@ that surfaced this incident.
 the internal `#sec-watch` channel. The advisory text was the only thing the team had — no
 hash, no C2 indicator, no SLSA provenance line yet.
 
-**12:39 AM PKT — Initial classification.** First on-call — the first responder — pulled the public
+**12:39 AM PKT — Initial classification.** The first on-call responder pulled the public
 advisory and Snyk write-up, confirmed two versions affected (`1.14.1`, `0.30.4`), confirmed
 the payload was `plain-crypto-js@4.2.1` injected as a transitive dependency. Severity
 flagged as needing escalation, but no IOCs published yet.
@@ -98,7 +98,7 @@ against AWS CloudWatch directly returned zero events over a 2-day window coverin
 attack window. The visibility gap was real but the answer was the right one: zero outbound
 contact with the C2 IP from any of the affected accounts.
 
-**12:08 PM — Manual triage of all six repos.** I walked the remaining three repos
+**12:08 PM — Manual triage of all six repos.** I walked the remaining four repos
 (`service-b`, `api-d`, `worker-e`, `lambda-f`) with `npm audit` and `npm ls`. None
 of them include `axios` in their dependency tree at all. The relief is real but the methodology
 matters more: `npm audit` showed clean against the advisory feed, and `npm ls` independently
@@ -147,7 +147,7 @@ authoritative. The retention policy is, in fact, seven days. Edge case acknowled
 campaign predated the retention window by even one day, we'd have a coverage gap. Worth
 filing as a separate hardening item but not material to this incident.
 
-**1:27 PM — Closing the visibility gap.** the security lead filed the action item for VPC flow logs →
+**1:27 PM — Closing the visibility gap.** The security lead filed the action item for VPC flow logs →
 Datadog integration. It was the one piece of telemetry we had to manually query CloudWatch
 for during the incident; ten more minutes spent doing that during a fast-moving response
 is ten minutes too many.
@@ -240,7 +240,7 @@ self-deleting installer with persistent artefacts), and C2 infrastructure overla
 
 That said, attribution in the supply-chain space is best held loosely. It is a useful prior
 for threat-hunting hypotheses, not a hard fact for incident scoping. The incident response
-above didn't change shape based on attribution — same containment, same scope —, and that's
+above didn't change shape based on attribution — same containment, same scope — and that's
 the right relationship between attribution and response. The actor matters strategically;
 the actions matter operationally.
 

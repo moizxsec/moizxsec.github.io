@@ -1,0 +1,130 @@
+---
+/**
+ * The advisory record block under a writeup title. Reads like a vulnerability
+ * database entry: identifier, score, weakness, affected range, vendor, status.
+ * Only fields present in frontmatter are rendered, so non-disclosure posts get a
+ * short strip and a CVE gets the full sheet.
+ */
+import SeverityBadge from './SeverityBadge.astro';
+import StatusBadge from './StatusBadge.astro';
+import { cweUrl, ghsaUrl, isoDate, nvdUrl, type Writeup } from '../lib/writeups';
+
+interface Props {
+  entry: Writeup;
+}
+const { entry } = Astro.props;
+const d = entry.data;
+const cweHref = d.cwe ? cweUrl(d.cwe) : undefined;
+const filled = d.cvss !== undefined ? Math.min(10, Math.max(0, Math.round(d.cvss))) : 0;
+const cells = Array.from({ length: 10 }, (_, i) => i < filled);
+---
+
+<dl class="panel grid grid-cols-2 md:grid-cols-4 gap-px bg-line overflow-hidden text-sm">
+  {
+    d.cve && (
+      <div class="bg-bg p-3.5">
+        <dt class="label mb-1">CVE</dt>
+        <dd>
+          <a href={nvdUrl(d.cve)} target="_blank" rel="noopener" class="font-mono text-fg font-semibold hover:text-accent transition-colors break-all">
+            {d.cve}
+          </a>
+        </dd>
+      </div>
+    )
+  }
+  {
+    d.ghsa && (
+      <div class="bg-bg p-3.5">
+        <dt class="label mb-1">GHSA</dt>
+        <dd>
+          <a href={ghsaUrl(d.ghsa)} target="_blank" rel="noopener" class="font-mono text-fg hover:text-accent transition-colors break-all text-xs sm:text-sm">
+            {d.ghsa}
+          </a>
+        </dd>
+      </div>
+    )
+  }
+  <div class="bg-bg p-3.5">
+    <dt class="label mb-1">Severity</dt>
+    <dd class="sev flex flex-col gap-2 !bg-transparent !border-0" data-sev={d.severity}>
+      <SeverityBadge severity={d.severity} cvss={d.cvss} />
+      {
+        d.cvss !== undefined && (
+          <span class="cvss-meter" role="img" aria-label={`CVSS ${d.cvss.toFixed(1)} of 10`}>
+            {cells.map((on, i) => (
+              <i class={on ? 'on' : ''} style={`--n:${i}`} />
+            ))}
+          </span>
+        )
+      }
+    </dd>
+  </div>
+  {
+    d.cvssVector && (
+      <div class="bg-bg p-3.5 col-span-2">
+        <dt class="label mb-1">Vector</dt>
+        <dd class="font-mono text-xs text-muted break-all">{d.cvssVector}</dd>
+      </div>
+    )
+  }
+  {
+    d.cwe && (
+      <div class="bg-bg p-3.5">
+        <dt class="label mb-1">Weakness</dt>
+        <dd class="font-mono text-xs sm:text-sm">
+          {cweHref ? (
+            <a href={cweHref} target="_blank" rel="noopener" class="text-fg hover:text-accent transition-colors">
+              {d.cwe}
+            </a>
+          ) : (
+            <span class="text-fg">{d.cwe}</span>
+          )}
+        </dd>
+      </div>
+    )
+  }
+  <div class="bg-bg p-3.5 col-span-2">
+    <dt class="label mb-1">Affected</dt>
+    <dd class="font-mono text-xs sm:text-sm text-fg break-words">
+      {d.product}
+      {d.version && <span class="text-muted"> {d.version}</span>}
+      {d.ecosystem && <span class="block text-2xs text-faint mt-0.5">{d.ecosystem}</span>}
+    </dd>
+  </div>
+  {
+    d.fixedIn && (
+      <div class="bg-bg p-3.5">
+        <dt class="label mb-1">Fixed in</dt>
+        <dd class="font-mono text-xs sm:text-sm text-fg break-words">{d.fixedIn}</dd>
+      </div>
+    )
+  }
+  {
+    d.vendor && (
+      <div class="bg-bg p-3.5">
+        <dt class="label mb-1">Vendor</dt>
+        <dd class="font-mono text-xs sm:text-sm text-fg break-words">{d.vendor}</dd>
+      </div>
+    )
+  }
+  <div class="bg-bg p-3.5">
+    <dt class="label mb-1">Status</dt>
+    <dd><StatusBadge status={d.status} /></dd>
+  </div>
+  <div class="bg-bg p-3.5">
+    <dt class="label mb-1">Published</dt>
+    <dd><time datetime={isoDate(d.date)} class="font-mono text-xs sm:text-sm text-fg tabular-nums">{isoDate(d.date)}</time></dd>
+  </div>
+  {
+    d.advisory && (
+      <div class="bg-bg p-3.5 col-span-2 md:col-span-1">
+        <dt class="label mb-1">Advisory</dt>
+        <dd>
+          <a href={d.advisory} target="_blank" rel="noopener" class="font-mono text-xs sm:text-sm text-fg hover:text-accent transition-colors">
+            vendor advisory <span aria-hidden="true">↗</span>
+          </a>
+        </dd>
+      </div>
+    )
+  }
+</dl>

@@ -1,0 +1,69 @@
+---
+/**
+ * Scroll reveal for anything carrying `.reveal`. Included once from BaseLayout.
+ *
+ * The contract: content is never hidden by markup or CSS alone. This script
+ * measures each target first and only puts elements that start *below* the
+ * viewport into the pending (hidden) state, then reveals them with a single
+ * shared IntersectionObserver. Anything already on screen, scrolled past, or
+ * display:none (the writeups filter) is marked revealed immediately. With
+ * reduced motion or without IntersectionObserver nothing is ever hidden.
+ */
+---
+
+<script>
+  (() => {
+    const targets = Array.from(document.querySelectorAll<HTMLElement>('.reveal'));
+    if (targets.length === 0) return;
+
+    const showAll = () => targets.forEach((el) => el.classList.add('is-in'));
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
+    if (reduce.matches || !('IntersectionObserver' in window)) {
+      showAll();
+      return;
+    }
+
+    const vh = window.innerHeight;
+    const pending: HTMLElement[] = [];
+    for (const el of targets) {
+      const r = el.getBoundingClientRect();
+      const offscreenBelow = r.top >= vh && (r.width > 0 || r.height > 0);
+      if (offscreenBelow) {
+        el.dataset.reveal = 'pending';
+        pending.push(el);
+      } else {
+        el.classList.add('is-in');
+      }
+    }
+    if (pending.length === 0) return;
+
+    // Entries arrive in observation (= document) order, so siblings that cross the
+    // threshold together get a small cascading delay; the cap keeps a long list
+    // from feeling slow.
+    const io = new IntersectionObserver(
+      (entries) => {
+        let i = 0;
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          const el = entry.target as HTMLElement;
+          el.style.setProperty('--reveal-delay', `${Math.min(i++, 5) * 70}ms`);
+          el.classList.add('is-in');
+          io.unobserve(el);
+          // Once landed, drop the pending state so the element's own transitions
+          // (row hover colours, for instance) are no longer overridden.
+          el.addEventListener('transitionend', () => delete el.dataset.reveal, { once: true });
+        }
+      },
+      { rootMargin: '0px 0px -6% 0px', threshold: 0.04 },
+    );
+    pending.forEach((el) => io.observe(el));
+
+    // If the reader switches motion off mid-session, stop holding anything back.
+    reduce.addEventListener?.('change', (e) => {
+      if (e.matches) {
+        io.disconnect();
+        showAll();
+      }
+    });
+  })();
+</script>

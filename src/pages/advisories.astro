@@ -1,0 +1,70 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import AdvisoryTable from '../components/AdvisoryTable.astro';
+import { SITE, getAdvisories, getPublished, stats } from '../lib/writeups';
+
+const advisories = await getAdvisories();
+const s = stats(await getPublished());
+const years = [...new Set(advisories.map((w) => w.data.date.getUTCFullYear()))].sort((a, b) => b - a);
+---
+
+<BaseLayout
+  title={`CVEs & advisories — ${SITE.handle}`}
+  description={`Security advisories and CVE disclosures by ${SITE.name}: identifiers, CVSS, affected versions, status, and full technical writeups.`}
+>
+  <div class="max-w-site mx-auto px-4 sm:px-6 pt-12 sm:pt-16 pb-16">
+    <header class="mb-10 max-w-3xl">
+      <p class="label text-accent mb-4">// disclosure record</p>
+      <h1 class="text-3xl sm:text-4xl font-semibold text-fg tracking-tight mb-4">CVEs &amp; advisories</h1>
+      <p class="text-muted leading-relaxed">
+        Every vulnerability I have reported to a maintainer, with its public identifier where one has
+        been assigned. Rows link to the full writeup — root cause, proof of concept, fix, and
+        timeline. The table is generated from each writeup's metadata, so it stays in step with the
+        research.
+      </p>
+    </header>
+
+    <dl class="reveal grid grid-cols-2 sm:grid-cols-4 gap-px bg-line border border-line rounded-md overflow-hidden mb-10">
+      <div class="bg-bg p-4">
+        <dt class="label mb-1">Advisories</dt>
+        <dd class="font-mono text-2xl text-fg tabular-nums">{s.advisories}</dd>
+      </div>
+      <div class="bg-bg p-4">
+        <dt class="label mb-1">CVE IDs</dt>
+        <dd class="font-mono text-2xl text-fg tabular-nums">{s.cves}</dd>
+      </div>
+      <div class="bg-bg p-4">
+        <dt class="label mb-1">Patched</dt>
+        <dd class="font-mono text-2xl text-fg tabular-nums">{s.patched}</dd>
+      </div>
+      <div class="bg-bg p-4">
+        <dt class="label mb-1">Years active</dt>
+        <dd class="font-mono text-2xl text-fg tabular-nums">
+          {years.length > 1 ? `${years[years.length - 1]}–${String(years[0]).slice(2)}` : (years[0] ?? '—')}
+        </dd>
+      </div>
+    </dl>
+
+    <AdvisoryTable advisories={advisories} />
+
+    <section class="reveal mt-14 grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl">
+      <div>
+        <h2 class="font-mono text-sm text-fg mb-2">Status vocabulary</h2>
+        <dl class="text-sm text-muted leading-relaxed space-y-1.5">
+          <div class="flex gap-3"><dt class="font-mono text-xs text-fg w-24 shrink-0 pt-0.5">Reported</dt><dd>Sent to the maintainer; awaiting acknowledgement or fix.</dd></div>
+          <div class="flex gap-3"><dt class="font-mono text-xs text-fg w-24 shrink-0 pt-0.5">Coordinated</dt><dd>Acknowledged; fix and identifier in progress under embargo.</dd></div>
+          <div class="flex gap-3"><dt class="font-mono text-xs text-fg w-24 shrink-0 pt-0.5">Patched</dt><dd>A fixed release is available.</dd></div>
+          <div class="flex gap-3"><dt class="font-mono text-xs text-fg w-24 shrink-0 pt-0.5">Public</dt><dd>Details published; no vendor fix applies (class or research).</dd></div>
+        </dl>
+      </div>
+      <div>
+        <h2 class="font-mono text-sm text-fg mb-2">Disclosure policy</h2>
+        <p class="text-sm text-muted leading-relaxed">
+          90-day coordinated disclosure from the date a vendor acknowledges receipt. If a vendor is
+          unresponsive after reasonable follow-up, or active exploitation is observed, I may publish
+          sooner. <a href="/about/#disclosure-policy" class="link-quiet">Full policy</a>.
+        </p>
+      </div>
+    </section>
+  </div>
+</BaseLayout>

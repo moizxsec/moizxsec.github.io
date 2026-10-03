@@ -1,44 +1,87 @@
 ---
+import { SITE } from '../lib/writeups';
+
 const { pathname } = Astro.url;
 const isActive = (path: string) =>
-  pathname === path || (path !== '/' && pathname.startsWith(path));
+  pathname === path || pathname === `${path}/` || (path !== '/' && pathname.startsWith(`${path}/`));
+
+const nav = [
+  { href: '/advisories', label: 'Advisories' },
+  { href: '/writeups', label: 'Writeups' },
+  { href: '/about', label: 'About' },
+];
 ---
 
-<header class="border-b border-zinc-900 bg-zinc-950/80 backdrop-blur sticky top-0 z-50">
-  <div class="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-4">
-    <a href="/" class="flex items-baseline gap-2 group min-w-0">
-      <span class="font-mono text-sm text-zinc-50 font-semibold tracking-tight">moizxsec</span>
-      <span class="font-mono text-xs text-zinc-600 group-hover:text-zinc-400 transition-colors hidden sm:inline">/ Abdul Moiz</span>
+<header class="sticky top-0 z-50 border-b border-line bg-bg/85 backdrop-blur supports-[backdrop-filter]:bg-bg/70">
+  <div class="max-w-site mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
+    <a href="/" class="flex items-center gap-2.5 group min-w-0" aria-label="moizxsec home">
+      <span class="relative inline-flex items-center justify-center w-6 h-6 rounded border border-line-strong bg-elev font-mono text-xs font-bold text-fg" aria-hidden="true">
+        m<span class="logo-cursor absolute right-[3px] bottom-[4px] w-[5px] h-[2px] bg-accent"></span>
+      </span>
+      <span class="font-mono text-sm text-fg font-semibold tracking-tight">{SITE.handle}</span>
+      <span class="font-mono text-xs text-faint group-hover:text-muted transition-colors hidden sm:inline">
+        / {SITE.name}
+      </span>
     </a>
-    <nav class="flex items-center gap-4 sm:gap-6 text-sm shrink-0">
+
+    <nav class="flex items-center gap-1 sm:gap-2 text-sm shrink-0" aria-label="Primary">
+      {
+        nav.map((n) => (
+          <a
+            href={n.href}
+            aria-current={isActive(n.href) ? 'page' : undefined}
+            class={`nav-link px-2 py-1 rounded transition-colors ${
+              isActive(n.href) ? 'text-fg' : 'text-muted hover:text-fg'
+            }`}
+          >
+            {n.label}
+          </a>
+        ))
+      }
       <a
-        href="/writeups"
-        class={`transition-colors ${isActive('/writeups') ? 'text-zinc-50' : 'text-zinc-400 hover:text-zinc-50'}`}
-      >
-        Writeups
-      </a>
-      <a
-        href="/about"
-        class={`transition-colors ${isActive('/about') ? 'text-zinc-50' : 'text-zinc-400 hover:text-zinc-50'}`}
-      >
-        About
-      </a>
-      <a
-        href="https://github.com/moizxsec"
+        href={SITE.github}
         target="_blank"
         rel="noopener"
-        class="text-zinc-400 hover:text-zinc-50 transition-colors hidden sm:inline"
+        class="px-2 py-1 rounded text-muted hover:text-fg transition-colors hidden md:inline"
       >
         GitHub
       </a>
-      <a
-        href="https://www.linkedin.com/in/muezism101"
-        target="_blank"
-        rel="noopener"
-        class="text-zinc-400 hover:text-zinc-50 transition-colors hidden sm:inline"
+      <span class="w-px h-4 bg-line mx-1 hidden sm:block" aria-hidden="true"></span>
+      <button
+        type="button"
+        id="theme-toggle"
+        class="inline-flex items-center justify-center w-8 h-8 rounded border border-transparent text-muted hover:text-fg hover:border-line transition-colors"
+        aria-label="Toggle colour theme"
+        title="Toggle theme"
       >
-        LinkedIn
-      </a>
+        <!-- sun (shown in dark mode) -->
+        <svg class="theme-icon-sun w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="4"></circle>
+          <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path>
+        </svg>
+        <!-- moon (shown in light mode) -->
+        <svg class="theme-icon-moon w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"></path>
+        </svg>
+      </button>
     </nav>
   </div>
 </header>
+
+<script>
+  const btn = document.getElementById('theme-toggle');
+  let switching: ReturnType<typeof setTimeout> | undefined;
+  btn?.addEventListener('click', () => {
+    const root = document.documentElement;
+    const next = root.dataset.theme === 'light' ? 'dark' : 'light';
+    // Cross-fade the palette swap (see .theme-switching). The class is removed
+    // afterwards so ordinary interactions keep their own, faster transitions.
+    root.classList.add('theme-switching');
+    clearTimeout(switching);
+    switching = setTimeout(() => root.classList.remove('theme-switching'), 350);
+    root.dataset.theme = next;
+    try {
+      localStorage.setItem('theme', next);
+    } catch {}
+  });
+</script>

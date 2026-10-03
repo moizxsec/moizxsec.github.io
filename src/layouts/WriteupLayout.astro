@@ -1,246 +1,262 @@
 ---
+import type { MarkdownHeading } from 'astro';
 import BaseLayout from './BaseLayout.astro';
-import SeverityBadge from '../components/SeverityBadge.astro';
+import MetaRecord from '../components/MetaRecord.astro';
+import TableOfContents from '../components/TableOfContents.astro';
 import RelatedWriteups from '../components/RelatedWriteups.astro';
+import {
+  SITE,
+  cweUrl,
+  ghsaUrl,
+  isAdvisory,
+  isoDate,
+  nvdUrl,
+  readingTime,
+  type Writeup,
+} from '../lib/writeups';
 
 interface Props {
-  title: string;
-  summary: string;
-  date: Date;
-  severity: 'Critical' | 'High' | 'Medium' | 'Low' | 'Informational';
-  cvss?: number;
-  cve?: string;
-  ghsa?: string;
-  cwe?: string;
-  product: string;
-  version?: string;
-  vendor?: string;
-  status: string;
-  tags: string[];
-  advisory?: string;
-  type?: 'Disclosure' | 'Research' | 'Class' | 'Architecture' | 'Incident Response';
-  readingTime?: number;
-  featured?: boolean;
+  entry: Writeup;
+  headings: MarkdownHeading[];
 }
 
-const props = Astro.props;
-const dateStr = props.date.toISOString().slice(0, 10);
+const { entry, headings } = Astro.props;
+const d = entry.data;
+const dateStr = isoDate(d.date);
+const mins = readingTime(entry);
+const advisory = isAdvisory(entry);
+
+const references = [
+  d.cve && { label: `NVD · ${d.cve}`, href: nvdUrl(d.cve) },
+  d.ghsa && { label: `GitHub Advisory · ${d.ghsa}`, href: ghsaUrl(d.ghsa) },
+  d.advisory && { label: 'Vendor advisory', href: d.advisory },
+  d.cwe && cweUrl(d.cwe) && { label: `MITRE · ${d.cwe}`, href: cweUrl(d.cwe)! },
+].filter(Boolean) as { label: string; href: string }[];
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'TechArticle',
+  headline: d.title,
+  description: d.summary,
+  datePublished: dateStr,
+  author: { '@type': 'Person', name: SITE.name, url: Astro.site?.toString() },
+  keywords: d.tags.join(', '),
+  url: new URL(Astro.url.pathname, Astro.site).toString(),
+};
 ---
 
-<BaseLayout title={`${props.title} — moizxsec`} description={props.summary}>
-  <div class="reading-progress" id="reading-progress" style="width: 0%"></div>
-  <script>
-    (() => {
-      const bar = document.getElementById('reading-progress');
-      const article = document.getElementById('writeup-content');
-      if (!bar || !article) return;
-      const update = () => {
-        const rect = article.getBoundingClientRect();
-        const total = article.scrollHeight - window.innerHeight;
-        const progress = Math.max(0, Math.min(100, ((-rect.top) / total) * 100));
-        bar.style.width = `${progress}%`;
-      };
-      window.addEventListener('scroll', update, { passive: true });
-      window.addEventListener('resize', update);
-      update();
-    })();
-  </script>
-  <div class="max-w-6xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
-    <a
-      href="/writeups"
-      class="inline-block text-xs font-mono text-zinc-500 hover:text-zinc-300 mb-8 transition-colors"
-    >
-      ← all writeups
-    </a>
+<BaseLayout title={`${d.title} — ${SITE.handle}`} description={d.summary} ogType="article" jsonLd={jsonLd}>
+  <div class="reading-progress" id="reading-progress" style="width: 0%" aria-hidden="true"></div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-[1fr_240px] gap-8 lg:gap-12">
-      <article class="min-w-0">
-        <header class="mb-10 pb-8 border-b border-zinc-900">
-          <div class="flex items-center gap-3 mb-4 text-xs font-mono text-zinc-500 flex-wrap">
-            <time datetime={dateStr}>{dateStr}</time>
-            <span class="text-zinc-800">·</span>
-            <SeverityBadge severity={props.severity} />
-            {
-              props.cvss && (
-                <>
-                  <span class="text-zinc-800">·</span>
-                  <span class="text-zinc-400">CVSS {props.cvss.toFixed(1)}</span>
-                </>
-              )
-            }
-            {
-              props.type && (
-                <>
-                  <span class="text-zinc-800">·</span>
-                  <span class="text-[0.65rem] font-mono uppercase tracking-wider text-zinc-400 border border-zinc-800 rounded px-1.5 py-0.5">
-                    {props.type}
-                  </span>
-                </>
-              )
-            }
-            {
-              props.readingTime && (
-                <>
-                  <span class="text-zinc-800">·</span>
-                  <span class="text-zinc-400">{props.readingTime} min read</span>
-                </>
-              )
-            }
-            {
-              props.featured && (
-                <>
-                  <span class="text-zinc-800">·</span>
-                  <span class="text-orange-400">★ featured</span>
-                </>
-              )
-            }
+  <div class="max-w-site mx-auto px-4 sm:px-6 pt-8 sm:pt-12 pb-16">
+    <nav class="font-mono text-xs text-faint mb-8 flex items-center gap-2 flex-wrap" aria-label="Breadcrumb">
+      <a href="/writeups/" class="hover:text-fg transition-colors">writeups</a>
+      <span aria-hidden="true">/</span>
+      <a href={`/writeups/?type=${encodeURIComponent(d.type)}`} class="hover:text-fg transition-colors">
+        {d.type.toLowerCase()}
+      </a>
+      {
+        advisory && (
+          <>
+            <span aria-hidden="true">/</span>
+            <a href="/advisories/" class="hover:text-fg transition-colors">advisories</a>
+          </>
+        )
+      }
+    </nav>
+
+    <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_16rem] gap-10 lg:gap-16">
+      <article class="min-w-0 max-w-prose lg:max-w-none">
+        <header class="mb-8">
+          <div class="flex items-center gap-x-3 gap-y-1.5 mb-4 font-mono text-xs text-faint flex-wrap">
+            <span class="chip">{d.type}</span>
+            <time datetime={dateStr} class="tabular-nums">{dateStr}</time>
+            <span aria-hidden="true">·</span>
+            <span class="tabular-nums">{mins} min read</span>
+            {d.featured && <span class="text-accent">★ selected</span>}
           </div>
-          <h1 class="text-2xl sm:text-3xl lg:text-4xl font-semibold text-zinc-50 leading-tight tracking-tight mb-4 break-words">
-            {props.title}
+
+          <h1 class="text-2xl sm:text-3xl lg:text-[2.5rem] font-semibold text-fg leading-[1.15] tracking-tight mb-5 break-words">
+            {d.title}
           </h1>
-          <p class="text-zinc-400 text-base leading-relaxed">{props.summary}</p>
+          <p class="text-muted text-base sm:text-lg leading-relaxed mb-8">{d.summary}</p>
+
+          <MetaRecord entry={entry} />
         </header>
 
-        <div class="writeup-prose" id="writeup-content">
+        <div class="lg:hidden mb-8">
+          <TableOfContents headings={headings} variant="inline" />
+        </div>
+
+        <div class="writeup-prose max-w-prose" id="writeup-content">
           <slot />
         </div>
 
-        <RelatedWriteups currentSlug={Astro.params.slug || ''} tags={props.tags} />
-
-        <hr class="border-zinc-900 my-12" />
-
-        <div class="text-xs font-mono text-zinc-500 leading-relaxed">
-          <p class="mb-2">
-            Found a mistake or want to discuss this research?
-            <a
-              href="mailto:muezzism@gmail.com"
-              class="text-zinc-300 underline decoration-zinc-700 underline-offset-2 hover:decoration-orange-500"
-              >Email</a
-            >.
+        <footer class="mt-14 pt-8 border-t border-line font-mono text-xs text-faint leading-relaxed space-y-2 max-w-prose">
+          {
+            d.tags.length > 0 && (
+              <ul class="flex flex-wrap gap-x-3 gap-y-1 mb-4" aria-label="Tags">
+                {d.tags.map((tag) => (
+                  <li>
+                    <a href={`/writeups/?tag=${encodeURIComponent(tag)}`} class="hover:text-fg transition-colors">
+                      #{tag}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            )
+          }
+          <p>
+            Found a mistake, or want to discuss this research?
+            <a href={`mailto:${SITE.email}`} class="link-quiet">Email me</a>.
           </p>
           <p>
             All research conducted under authorisation or responsible-disclosure policy. Client identifiers redacted where applicable.
           </p>
+        </footer>
+
+        <div class="max-w-prose">
+          <RelatedWriteups currentSlug={entry.slug} tags={d.tags} type={d.type} />
         </div>
       </article>
 
-      <aside class="lg:sticky lg:top-24 lg:self-start">
-        <div class="border border-zinc-900 rounded-md p-4 mb-4">
-          <div class="text-[0.65rem] font-mono uppercase tracking-widest text-zinc-600 mb-3">
-            Metadata
+      <aside class="hidden lg:block">
+        <div class="sticky top-20 space-y-8">
+          <TableOfContents headings={headings} variant="sidebar" />
+
+          {
+            references.length > 0 && (
+              <div>
+                <div class="label mb-3">References</div>
+                <ul class="space-y-1.5">
+                  {references.map((r) => (
+                    <li>
+                      <a
+                        href={r.href}
+                        target="_blank"
+                        rel="noopener"
+                        class="font-mono text-xs text-muted hover:text-fg transition-colors break-words"
+                      >
+                        {r.label} <span aria-hidden="true">↗</span>
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )
+          }
+
+          <div>
+            <a href="#main" class="font-mono text-xs text-faint hover:text-fg transition-colors">↑ back to top</a>
           </div>
-          <dl class="space-y-2.5 text-xs font-mono">
-            <div class="flex justify-between gap-2">
-              <dt class="text-zinc-500">Severity</dt>
-              <dd><SeverityBadge severity={props.severity} /></dd>
-            </div>
-            {
-              props.cvss && (
-                <div class="flex justify-between gap-2">
-                  <dt class="text-zinc-500">CVSS</dt>
-                  <dd class="text-zinc-200">{props.cvss.toFixed(1)}</dd>
-                </div>
-              )
-            }
-            {
-              props.cwe && (
-                <div class="flex justify-between gap-2">
-                  <dt class="text-zinc-500">CWE</dt>
-                  <dd class="text-zinc-200">{props.cwe}</dd>
-                </div>
-              )
-            }
-            <div class="flex justify-between gap-2">
-              <dt class="text-zinc-500">Status</dt>
-              <dd class="text-zinc-200">{props.status}</dd>
-            </div>
-            <div class="flex justify-between gap-2">
-              <dt class="text-zinc-500">Date</dt>
-              <dd class="text-zinc-200">{dateStr}</dd>
-            </div>
-          </dl>
         </div>
-
-        <div class="border border-zinc-900 rounded-md p-4 mb-4">
-          <div class="text-[0.65rem] font-mono uppercase tracking-widest text-zinc-600 mb-3">
-            Affected
-          </div>
-          <dl class="space-y-2.5 text-xs font-mono">
-            <div>
-              <dt class="text-zinc-500 mb-1">Product</dt>
-              <dd class="text-zinc-200 break-words">{props.product}</dd>
-            </div>
-            {
-              props.version && (
-                <div>
-                  <dt class="text-zinc-500 mb-1">Version</dt>
-                  <dd class="text-zinc-200 break-words">{props.version}</dd>
-                </div>
-              )
-            }
-            {
-              props.vendor && (
-                <div>
-                  <dt class="text-zinc-500 mb-1">Vendor</dt>
-                  <dd class="text-zinc-200 break-words">{props.vendor}</dd>
-                </div>
-              )
-            }
-          </dl>
-        </div>
-
-        {(props.ghsa || props.cve || props.advisory) && (
-          <div class="border border-zinc-900 rounded-md p-4 mb-4">
-            <div class="text-[0.65rem] font-mono uppercase tracking-widest text-zinc-600 mb-3">
-              References
-            </div>
-            <dl class="space-y-2.5 text-xs font-mono">
-              {props.ghsa && (
-                <div>
-                  <dt class="text-zinc-500 mb-1">GHSA</dt>
-                  <dd class="text-zinc-200 break-all">{props.ghsa}</dd>
-                </div>
-              )}
-              {props.cve && (
-                <div>
-                  <dt class="text-zinc-500 mb-1">CVE</dt>
-                  <dd class="text-zinc-200">{props.cve}</dd>
-                </div>
-              )}
-              {props.advisory && (
-                <div>
-                  <dt class="text-zinc-500 mb-1">Advisory</dt>
-                  <dd>
-                    <a
-                      href={props.advisory}
-                      target="_blank"
-                      rel="noopener"
-                      class="text-zinc-200 underline decoration-zinc-700 underline-offset-2 hover:decoration-orange-500 break-all"
-                    >
-                      open ↗
-                    </a>
-                  </dd>
-                </div>
-              )}
-            </dl>
-          </div>
-        )}
-
-        {props.tags.length > 0 && (
-          <div class="border border-zinc-900 rounded-md p-4">
-            <div class="text-[0.65rem] font-mono uppercase tracking-widest text-zinc-600 mb-3">
-              Tags
-            </div>
-            <div class="flex flex-wrap gap-1.5">
-              {props.tags.map((tag) => (
-                <span class="text-[0.65rem] font-mono uppercase tracking-wider text-zinc-400 border border-zinc-800 rounded px-1.5 py-0.5">
-                  {tag}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
       </aside>
     </div>
   </div>
+
+  <script>
+    // Reading progress — proportion of the article scrolled past the viewport top.
+    (() => {
+      const bar = document.getElementById('reading-progress');
+      const article = document.getElementById('writeup-content');
+      if (!bar || !article) return;
+      let ticking = false;
+      const update = () => {
+        ticking = false;
+        const rect = article.getBoundingClientRect();
+        const total = article.offsetHeight - window.innerHeight;
+        const p = total <= 0 ? 100 : Math.max(0, Math.min(100, (-rect.top / total) * 100));
+        bar.style.width = `${p}%`;
+      };
+      const onScroll = () => {
+        if (!ticking) {
+          ticking = true;
+          requestAnimationFrame(update);
+        }
+      };
+      window.addEventListener('scroll', onScroll, { passive: true });
+      window.addEventListener('resize', onScroll);
+      update();
+    })();
+
+    // TOC scroll-spy — highlight the last heading that has crossed the top offset.
+    (() => {
+      const toc = document.querySelector<HTMLElement>('[data-toc]');
+      const content = document.getElementById('writeup-content');
+      if (!toc || !content) return;
+      const links = Array.from(toc.querySelectorAll<HTMLAnchorElement>('a[href^="#"]'));
+      const targets = links
+        .map((a) => document.getElementById(decodeURIComponent(a.hash.slice(1))))
+        .filter((el): el is HTMLElement => Boolean(el));
+      if (targets.length === 0) return;
+      let current: HTMLAnchorElement | null = null;
+      let ticking = false;
+      const update = () => {
+        ticking = false;
+        const offset = 96;
+        let active: HTMLElement | null = null;
+        for (const t of targets) {
+          if (t.getBoundingClientRect().top - offset <= 0) active = t;
+          else break;
+        }
+        const link = active ? links.find((a) => a.hash === `#${active!.id}`) ?? null : null;
+        if (link === current) return;
+        current?.removeAttribute('aria-current');
+        link?.setAttribute('aria-current', 'true');
+        current = link;
+      };
+      const onScroll = () => {
+        if (!ticking) {
+          ticking = true;
+          requestAnimationFrame(update);
+        }
+      };
+      window.addEventListener('scroll', onScroll, { passive: true });
+      window.addEventListener('resize', onScroll);
+      update();
+    })();
+
+    // Code toolbar — language tag and copy button on every Shiki block.
+    (() => {
+      const blocks = document.querySelectorAll<HTMLPreElement>('#writeup-content pre.astro-code');
+      blocks.forEach((pre) => {
+        const wrap = document.createElement('div');
+        wrap.className = 'code-wrap';
+        pre.parentNode?.insertBefore(wrap, pre);
+        wrap.appendChild(pre);
+
+        const tools = document.createElement('div');
+        tools.className = 'code-tools';
+
+        const lang = document.createElement('span');
+        lang.className = 'code-lang';
+        const l = pre.dataset.language;
+        lang.textContent = l && l !== 'plaintext' && l !== 'text' ? l : '';
+        tools.appendChild(lang);
+
+        if (navigator.clipboard) {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'code-copy';
+          btn.textContent = 'copy';
+          btn.setAttribute('aria-label', 'Copy code to clipboard');
+          btn.addEventListener('click', async () => {
+            try {
+              await navigator.clipboard.writeText(pre.innerText.replace(/\n$/, ''));
+              btn.textContent = 'copied';
+              btn.dataset.done = 'true';
+              setTimeout(() => {
+                btn.textContent = 'copy';
+                delete btn.dataset.done;
+              }, 1600);
+            } catch {
+              btn.textContent = 'failed';
+            }
+          });
+          tools.appendChild(btn);
+        }
+        wrap.appendChild(tools);
+      });
+    })();
+  </script>
 </BaseLayout>

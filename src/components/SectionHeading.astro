@@ -1,0 +1,30 @@
+---
+/**
+ * Numbered monospace section marker used across the home page and index pages:
+ *   // 01  Advisories                              view all →
+ */
+interface Props {
+  index?: string;
+  title: string;
+  id?: string;
+  href?: string;
+  linkLabel?: string;
+  count?: number;
+}
+const { index, title, id, href, linkLabel = 'view all', count } = Astro.props;
+---
+
+<div class="flex items-end justify-between gap-4 border-b border-line pb-3 mb-6">
+  <div class="flex items-baseline gap-3 min-w-0">
+    {index && <span class="label text-accent" aria-hidden="true">// {index}</span>}
+    <h2 id={id} class="text-base sm:text-lg font-semibold text-fg tracking-tight truncate scroll-mt-20">{title}</h2>
+    {count !== undefined && <span class="font-mono text-xs text-faint tabular-nums">{count}</span>}
+  </div>
+  {
+    href && (
+      <a href={href} class="arrow-link font-mono text-xs text-muted hover:text-fg transition-colors shrink-0">
+        {linkLabel} <span aria-hidden="true">→</span>
+      </a>
+    )
+  }
+</div>

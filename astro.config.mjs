@@ -10,7 +10,14 @@ export default defineConfig({
   integrations: [mdx(), sitemap(), tailwind({ applyBaseStyles: false })],
   markdown: {
     shikiConfig: {
-      theme: 'github-dark-dimmed',
+      // Dual themes: Shiki emits --shiki-dark / --shiki-light variables and
+      // global.css picks one per [data-theme]. defaultColor:false keeps the
+      // inline styles out so the theme switch is pure CSS.
+      themes: {
+        dark: 'github-dark-dimmed',
+        light: 'github-light',
+      },
+      defaultColor: false,
       wrap: false,
     },
     rehypePlugins: [

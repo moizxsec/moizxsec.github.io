@@ -22,6 +22,10 @@ const writeups = defineCollection({
     featured: z.boolean().default(false),
     type: z.enum(['Disclosure', 'Research', 'Class', 'Architecture', 'Incident Response']).default('Research'),
     readingTime: z.number().optional(),
+    // Optional advisory-record fields. All derived views fall back cleanly when absent.
+    ecosystem: z.string().optional(), // e.g. "PyPI", "npm", "Packagist" — shown in the advisory table
+    fixedIn: z.string().optional(), // e.g. "7.14.2" — the version that closes the issue
+    cvssVector: z.string().optional(), // e.g. "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H"
   }),
 });
 

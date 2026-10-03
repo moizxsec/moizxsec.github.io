@@ -1,84 +1,166 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import WriteupCard from '../../components/WriteupCard.astro';
-import { getCollection } from 'astro:content';
+import { SITE, TYPE_BLURB, byOrder, getPublished, tagCounts, typeCounts } from '../../lib/writeups';
 
-const writeups = (await getCollection('writeups', ({ data }) => !data.draft)).sort(
-  (a, b) => (a.data.order ?? 100) - (b.data.order ?? 100),
-);
-
-const tagCounts = new Map<string, number>();
-for (const w of writeups) {
-  for (const t of w.data.tags) tagCounts.set(t, (tagCounts.get(t) ?? 0) + 1);
-}
-const topTags = [...tagCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 12);
+const writeups = (await getPublished()).sort(byOrder);
+const types = typeCounts(writeups);
+const tags = tagCounts(writeups).slice(0, 18);
 ---
 
 <BaseLayout
-  title="Writeups — moizxsec"
-  description="Vulnerability disclosures and offensive security research writeups by Abdul Moiz."
+  title={`Writeups — ${SITE.handle}`}
+  description={`Vulnerability disclosures, offensive security research, and class-of-vuln deep dives by ${SITE.name}.`}
 >
-  <div class="max-w-6xl mx-auto px-4 sm:px-6 pt-12 sm:pt-16 pb-12">
-    <div class="grid grid-cols-1 lg:grid-cols-[1fr_240px] gap-8 lg:gap-12">
-      <section class="min-w-0">
-        <h1 class="text-2xl font-semibold text-zinc-50 tracking-tight mb-3">Writeups</h1>
-        <p class="text-zinc-400 text-sm leading-relaxed max-w-2xl mb-10">
-          Public vulnerability research, disclosure writeups, and class-of-vuln deep dives.
-          Client identifiers from confidential engagements are redacted; technical substance
-          is preserved.
+  <div class="max-w-site mx-auto px-4 sm:px-6 pt-12 sm:pt-16 pb-12">
+    <header class="mb-8 max-w-3xl">
+      <p class="label text-accent mb-4">// index</p>
+      <h1 class="text-3xl sm:text-4xl font-semibold text-fg tracking-tight mb-4">Writeups</h1>
+      <p class="text-muted leading-relaxed">
+        Public vulnerability research, disclosure writeups, and class-of-vuln deep dives. Client
+        identifiers from confidential engagements are redacted; the technical substance is preserved.
+      </p>
+    </header>
+
+    <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_16rem] gap-8 lg:gap-12">
+      <section class="min-w-0 order-2 lg:order-1" aria-labelledby="results-heading">
+        <div class="flex items-center justify-between gap-4 border-b border-line pb-3 mb-1">
+          <h2 id="results-heading" class="label">
+            <span data-filter-count>{writeups.length}</span> of {writeups.length}
+            <span data-filter-label class="normal-case tracking-normal text-muted"></span>
+          </h2>
+          <button type="button" data-filter-clear class="font-mono text-xs text-faint hover:text-fg transition-colors hidden">
+            clear <span aria-hidden="true">×</span>
+          </button>
+        </div>
+
+        <ul data-filter-list>
+          {writeups.map((w) => <WriteupCard entry={w} />)}
+        </ul>
+
+        <p data-filter-empty class="hidden font-mono text-sm text-faint py-10">
+          Nothing matches that combination yet.
         </p>
-        {
-          writeups.map((w) => (
-            <WriteupCard
-              slug={w.slug}
-              title={w.data.title}
-              summary={w.data.summary}
-              date={w.data.date}
-              severity={w.data.severity}
-              cvss={w.data.cvss}
-              product={w.data.product}
-              tags={w.data.tags}
-              type={w.data.type}
-              readingTime={w.data.readingTime}
-              featured={w.data.featured}
-            />
-          ))
-        }
       </section>
 
-      <aside class="lg:sticky lg:top-24 lg:self-start space-y-4">
-        <div class="border border-zinc-900 rounded-md p-4">
-          <div class="text-[0.65rem] font-mono uppercase tracking-widest text-zinc-600 mb-3">
-            Filter
-          </div>
+      <!-- Filters are progressive enhancement: without JS every row is visible. -->
+      <aside class="order-1 lg:order-2 lg:sticky lg:top-20 lg:self-start space-y-6" data-filter-bar>
+        <div>
+          <div class="label mb-3">Type</div>
           <div class="flex flex-wrap gap-1.5">
+            <button type="button" class="chip filter-chip hover:text-fg transition-colors" data-filter="type" data-value="" aria-pressed="true">
+              all <span class="text-faint tabular-nums">{writeups.length}</span>
+            </button>
             {
-              topTags.map(([tag, n]) => (
-                <span class="text-[0.65rem] font-mono uppercase tracking-wider text-zinc-400 border border-zinc-800 rounded px-1.5 py-0.5">
-                  {tag} <span class="text-zinc-600">{n}</span>
-                </span>
+              types.map(([t, n]) => (
+                <button
+                  type="button"
+                  class="chip filter-chip hover:text-fg transition-colors"
+                  data-filter="type"
+                  data-value={t}
+                  aria-pressed="false"
+                  title={TYPE_BLURB[t]}
+                >
+                  {t} <span class="text-faint tabular-nums">{n}</span>
+                </button>
               ))
             }
           </div>
         </div>
 
-        <div class="border border-zinc-900 rounded-md p-4">
-          <div class="text-[0.65rem] font-mono uppercase tracking-widest text-zinc-600 mb-3">
-            Disclosure Policy
+        <div>
+          <div class="label mb-3">Tags</div>
+          <div class="flex flex-wrap gap-1.5">
+            {
+              tags.map(([tag, n]) => (
+                <button
+                  type="button"
+                  class="chip filter-chip hover:text-fg transition-colors"
+                  data-filter="tag"
+                  data-value={tag}
+                  aria-pressed="false"
+                >
+                  #{tag} <span class="text-faint tabular-nums">{n}</span>
+                </button>
+              ))
+            }
           </div>
-          <p class="text-xs text-zinc-400 leading-relaxed">
-            90-day coordinated disclosure window from vendor acknowledgement. Confidential
-            engagements never reveal client identifiers — the technical class is what
-            travels.
+        </div>
+
+        <div class="panel p-4 hidden lg:block">
+          <div class="label mb-2">Disclosure policy</div>
+          <p class="text-xs text-muted leading-relaxed">
+            90-day coordinated window from vendor acknowledgement. Confidential engagements never
+            reveal client identifiers — the technical class is what travels.
           </p>
-          <a
-            href="/about"
-            class="inline-block mt-3 text-xs font-mono text-zinc-300 underline decoration-zinc-700 underline-offset-2 hover:decoration-orange-500"
-          >
-            full policy →
-          </a>
+          <a href="/about/#disclosure-policy" class="inline-block mt-3 font-mono text-xs link-quiet">full policy →</a>
         </div>
       </aside>
     </div>
   </div>
+
+  <script>
+    // Client-side filter. State lives in the URL (?type=…&tag=…) so filtered views are shareable.
+    (() => {
+      const list = document.querySelector<HTMLElement>('[data-filter-list]');
+      if (!list) return;
+      const rows = Array.from(list.querySelectorAll<HTMLElement>('.writeup-row'));
+      const chips = Array.from(document.querySelectorAll<HTMLButtonElement>('.filter-chip'));
+      const countEl = document.querySelector<HTMLElement>('[data-filter-count]');
+      const labelEl = document.querySelector<HTMLElement>('[data-filter-label]');
+      const clearBtn = document.querySelector<HTMLButtonElement>('[data-filter-clear]');
+      const emptyEl = document.querySelector<HTMLElement>('[data-filter-empty]');
+
+      const state = { type: '', tag: '' };
+
+      const apply = (push = true) => {
+        let shown = 0;
+        for (const row of rows) {
+          const okType = !state.type || row.dataset.type === state.type;
+          const okTag = !state.tag || (row.dataset.tags ?? '').split(' ').includes(state.tag);
+          const show = okType && okTag;
+          row.hidden = !show;
+          if (show) shown++;
+        }
+        for (const c of chips) {
+          const key = c.dataset.filter as 'type' | 'tag';
+          c.setAttribute('aria-pressed', String((state[key] ?? '') === (c.dataset.value ?? '')));
+        }
+        if (countEl) countEl.textContent = String(shown);
+        if (labelEl) {
+          const parts = [state.type, state.tag && `#${state.tag}`].filter(Boolean);
+          labelEl.textContent = parts.length ? ` — ${parts.join(' · ')}` : '';
+        }
+        clearBtn?.classList.toggle('hidden', !state.type && !state.tag);
+        emptyEl?.classList.toggle('hidden', shown > 0);
+
+        if (push) {
+          const url = new URL(location.href);
+          state.type ? url.searchParams.set('type', state.type) : url.searchParams.delete('type');
+          state.tag ? url.searchParams.set('tag', state.tag) : url.searchParams.delete('tag');
+          history.replaceState(null, '', url);
+        }
+      };
+
+      for (const c of chips) {
+        c.addEventListener('click', () => {
+          const key = c.dataset.filter as 'type' | 'tag';
+          const value = c.dataset.value ?? '';
+          // Clicking the active tag chip toggles it off; the type row has an explicit "all".
+          state[key] = key === 'tag' && state.tag === value ? '' : value;
+          apply();
+        });
+      }
+      clearBtn?.addEventListener('click', () => {
+        state.type = '';
+        state.tag = '';
+        apply();
+      });
+
+      const params = new URLSearchParams(location.search);
+      state.type = params.get('type') ?? '';
+      state.tag = params.get('tag') ?? '';
+      apply(false);
+    })();
+  </script>
 </BaseLayout>

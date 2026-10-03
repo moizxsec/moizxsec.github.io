@@ -1,43 +1,42 @@
 ---
 import SeverityBadge from './SeverityBadge.astro';
-import { getCollection } from 'astro:content';
+import { byOrder, getPublished, isoDate } from '../lib/writeups';
 
 interface Props {
   currentSlug: string;
   tags: string[];
+  type?: string;
 }
 
-const { currentSlug, tags } = Astro.props;
+const { currentSlug, tags, type } = Astro.props;
 
-const all = await getCollection('writeups', ({ data }) => !data.draft);
-const ranked = all
+// Shared tags weigh most; same type breaks ties; then the author's own ordering.
+const all = await getPublished();
+const related = all
   .filter((w) => w.slug !== currentSlug)
   .map((w) => ({
     entry: w,
-    score: w.data.tags.filter((t) => tags.includes(t)).length,
+    score: w.data.tags.filter((t) => tags.includes(t)).length * 2 + (w.data.type === type ? 1 : 0),
   }))
-  .sort((a, b) => b.score - a.score || (a.entry.data.order ?? 100) - (b.entry.data.order ?? 100));
-
-const related = ranked.slice(0, 3).map((r) => r.entry);
+  .sort((a, b) => b.score - a.score || byOrder(a.entry, b.entry))
+  .slice(0, 3)
+  .map((r) => r.entry);
 ---
 
 {
   related.length > 0 && (
-    <section class="border-t border-zinc-900 pt-8 mt-12">
-      <div class="text-[0.65rem] font-mono uppercase tracking-widest text-zinc-600 mb-4">
-        Related writeups
-      </div>
-      <ul class="space-y-3">
+    <section class="reveal border-t border-line pt-8 mt-14" aria-labelledby="related-heading">
+      <h2 id="related-heading" class="label mb-4">
+        Related
+      </h2>
+      <ul class="divide-y divide-line">
         {related.map((w) => (
           <li>
-            <a
-              href={`/writeups/${w.slug}`}
-              class="flex items-baseline gap-3 group text-sm"
-            >
-              <span class="text-xs font-mono text-zinc-600 shrink-0 w-20">
-                {w.data.date.toISOString().slice(0, 10)}
-              </span>
-              <span class="text-zinc-300 group-hover:text-orange-300 transition-colors flex-1">
+            <a href={`/writeups/${w.slug}/`} class="flex items-center gap-3 py-3 group text-sm">
+              <time datetime={isoDate(w.data.date)} class="font-mono text-xs text-faint shrink-0 tabular-nums hidden sm:block">
+                {isoDate(w.data.date)}
+              </time>
+              <span class="text-fg group-hover:text-accent transition-colors flex-1 min-w-0 leading-snug">
                 {w.data.title}
               </span>
               <span class="shrink-0">

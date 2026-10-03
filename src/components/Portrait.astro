@@ -1,0 +1,27 @@
+---
+/**
+ * The profile photo with its resting treatment (slight desaturation + scanline
+ * veil, see `.portrait` in global.css). Sizing, border and radius belong on the
+ * wrapper so both the hero and the About sidebar share one look. The intrinsic
+ * width/height stay on the <img> so the box is reserved before the file loads.
+ */
+import { SITE } from '../lib/writeups';
+
+interface Props {
+  class?: string;
+  loading?: 'eager' | 'lazy';
+}
+
+const { class: cls = '', loading = 'lazy' } = Astro.props;
+---
+
+<span class={`portrait ${cls}`}>
+  <img
+    src="/images/profile.jpg"
+    alt={`Portrait of ${SITE.name}`}
+    width="600"
+    height="600"
+    loading={loading}
+    decoding="async"
+  />
+</span>

@@ -1,0 +1,92 @@
+---
+/**
+ * The disclosure board. Rows are derived entirely from frontmatter (see isAdvisory),
+ * so a new article with a `cve:` or `ghsa:` field appears here without touching code.
+ * Renders as a table from md up and as stacked records below that.
+ */
+import SeverityBadge from './SeverityBadge.astro';
+import StatusBadge from './StatusBadge.astro';
+import { advisoryId, isoDate, type Writeup } from '../lib/writeups';
+
+interface Props {
+  advisories: Writeup[];
+  limit?: number;
+}
+const { advisories, limit } = Astro.props;
+const rows = limit ? advisories.slice(0, limit) : advisories;
+---
+
+{
+  rows.length === 0 ? (
+    <p class="font-mono text-sm text-faint py-6">No public advisories yet.</p>
+  ) : (
+    <div class="panel overflow-hidden">
+      <table class="block md:table w-full text-sm">
+        <thead class="hidden md:table-header-group">
+          <tr class="label text-left bg-sub/60">
+            <th scope="col" class="font-medium px-4 py-2.5">Identifier</th>
+            <th scope="col" class="font-medium px-4 py-2.5">Affected</th>
+            <th scope="col" class="font-medium px-4 py-2.5">Severity</th>
+            <th scope="col" class="font-medium px-4 py-2.5">Weakness</th>
+            <th scope="col" class="font-medium px-4 py-2.5">Status</th>
+            <th scope="col" class="font-medium px-4 py-2.5 text-right">Date</th>
+          </tr>
+        </thead>
+        <tbody class="block md:table-row-group">
+          {rows.map((w) => {
+            const d = w.data;
+            const adv = advisoryId(w);
+            const href = `/writeups/${w.slug}/`;
+            const affected = [d.product, d.version].filter(Boolean).join(' ');
+            return (
+              <tr class="reveal group border-t border-line first:border-t-0 md:first:border-t hover:bg-elev/70 transition-colors grid grid-cols-2 gap-x-4 gap-y-2 p-4 md:table-row md:p-0">
+                {/* Identifier + title: the whole row links through this anchor. */}
+                <td class="col-span-2 md:px-4 md:py-3 md:align-top">
+                  <a href={href} class="block focus-visible:outline-none">
+                    <span class="font-mono text-sm text-fg font-semibold group-hover:text-accent transition-colors">
+                      {adv.id}
+                    </span>
+                    {adv.kind === 'CVE' && d.ghsa && (
+                      <span class="block font-mono text-2xs text-faint mt-0.5">{d.ghsa}</span>
+                    )}
+                    <span class="block text-xs text-muted mt-1 leading-snug max-w-[26rem]">{d.title}</span>
+                  </a>
+                </td>
+                <td class="md:px-4 md:py-3 md:align-top">
+                  <span class="label block md:hidden mb-1">Affected</span>
+                  <span class="font-mono text-xs text-fg break-words">{affected}</span>
+                  {(d.ecosystem || d.vendor) && (
+                    <span class="block font-mono text-2xs text-faint mt-0.5 break-words">
+                      {[d.ecosystem, d.vendor].filter(Boolean).join(' · ')}
+                    </span>
+                  )}
+                  {d.fixedIn && (
+                    <span class="block font-mono text-2xs text-faint mt-0.5">fixed in {d.fixedIn}</span>
+                  )}
+                </td>
+                <td class="md:px-4 md:py-3 md:align-top">
+                  <span class="label block md:hidden mb-1">Severity</span>
+                  <SeverityBadge severity={d.severity} cvss={d.cvss} />
+                </td>
+                <td class="md:px-4 md:py-3 md:align-top">
+                  <span class="label block md:hidden mb-1">Weakness</span>
+                  <span class="font-mono text-xs text-muted">{d.cwe ?? '—'}</span>
+                </td>
+                <td class="md:px-4 md:py-3 md:align-top">
+                  <span class="label block md:hidden mb-1">Status</span>
+                  <StatusBadge status={d.status} />
+                </td>
+                <td class="md:px-4 md:py-3 md:align-top md:text-right">
+                  <span class="label block md:hidden mb-1">Date</span>
+                  <time datetime={isoDate(d.date)} class="font-mono text-xs text-faint tabular-nums">
+                    {isoDate(d.date)}
+                  </time>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}

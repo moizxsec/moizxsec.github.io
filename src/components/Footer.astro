@@ -1,15 +1,20 @@
 ---
+import { SITE } from '../lib/writeups';
 const year = new Date().getFullYear();
 ---
 
-<footer class="border-t border-zinc-900 mt-24">
-  <div class="max-w-6xl mx-auto px-6 py-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs text-zinc-500 font-mono">
-    <div>© {year} Abdul Moiz. All research conducted under authorisation.</div>
-    <div class="flex gap-4 flex-wrap">
-      <a href="mailto:muezzism@gmail.com" class="hover:text-zinc-300 transition-colors">muezzism@gmail.com</a>
-      <a href="https://github.com/moizxsec" target="_blank" rel="noopener" class="hover:text-zinc-300 transition-colors">github</a>
-      <a href="https://www.linkedin.com/in/muezism101" target="_blank" rel="noopener" class="hover:text-zinc-300 transition-colors">linkedin</a>
-      <a href="/rss.xml" class="hover:text-zinc-300 transition-colors">rss</a>
+<footer class="border-t border-line mt-24">
+  <div class="max-w-site mx-auto px-4 sm:px-6 py-10 grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-6 text-xs font-mono text-faint">
+    <div class="space-y-1.5">
+      <div class="text-muted">© {year} {SITE.name} · {SITE.handle}</div>
+      <div>All research conducted under authorisation or coordinated disclosure.</div>
     </div>
+    <ul class="flex flex-wrap gap-x-5 gap-y-2 sm:justify-end">
+      <li><a href={`mailto:${SITE.email}`} class="hover:text-fg transition-colors">email</a></li>
+      <li><a href={SITE.github} target="_blank" rel="noopener" class="hover:text-fg transition-colors">github</a></li>
+      <li><a href={SITE.linkedin} target="_blank" rel="noopener" class="hover:text-fg transition-colors">linkedin</a></li>
+      <li><a href="/rss.xml" class="hover:text-fg transition-colors">rss</a></li>
+      <li><a href="/sitemap-index.xml" class="hover:text-fg transition-colors">sitemap</a></li>
+    </ul>
   </div>
 </footer>

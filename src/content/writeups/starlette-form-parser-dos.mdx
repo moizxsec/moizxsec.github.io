@@ -1,18 +1,22 @@
 ---
 title: "Starlette — Form-Parser Limits Silently Ignored for URL-Encoded Bodies"
 summary: "Starlette's Request.form() advertises max_fields, max_files, and max_part_size as resource-consumption guards. They are correctly enforced for multipart/form-data but quietly dropped on the application/x-www-form-urlencoded path, so any FastAPI or Starlette app that calls request.form() and accepts URL-encoded bodies is exposed to a one-request event-loop-blocking DoS."
-date: 2026-04-22
+date: 2026-06-15
 severity: High
 cvss: 7.5
-ghsa: "GHSA-cm5j-qvph-7x6w"
+cve: "CVE-2026-54283"
+ghsa: "GHSA-82w8-qh3p-5jfq"
 cwe: "CWE-770"
 product: "starlette"
-version: ">= 0.20.4, ≤ 1.0.0"
+version: ">= 0.4.1, < 1.3.1"
 vendor: "encode/starlette"
-status: "Coordinated"
-tags: ["dos", "resource-consumption", "python", "asgi", "fastapi"]
-advisory: "https://github.com/Kludex/starlette/security/advisories/GHSA-cm5j-qvph-7x6w"
-order: 2
+status: "Patched"
+ecosystem: "PyPI"
+fixedIn: "1.3.1"
+cvssVector: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+tags: ["dos", "resource-consumption", "python", "asgi", "fastapi", "cwe-770"]
+advisory: "https://github.com/advisories/GHSA-82w8-qh3p-5jfq"
+order: 4
 featured: true
 type: "Disclosure"
 readingTime: 5
@@ -39,9 +43,10 @@ arbitrary size containing hundreds of thousands of fields, and the parser will a
 it — blocking the async event loop on every concurrent request.
 
 The advisory is
-[GHSA-cm5j-qvph-7x6w](https://github.com/Kludex/starlette/security/advisories/GHSA-cm5j-qvph-7x6w),
-CVSS 7.5, currently in coordinated disclosure with the maintainer (Marcelo Trylesinski).
-Credit accepted as analyst; the publication date will land here once a CVE is issued.
+[GHSA-82w8-qh3p-5jfq](https://github.com/advisories/GHSA-82w8-qh3p-5jfq) / **CVE-2026-54283**,
+CVSS 7.5, fixed by the maintainer (Marcelo Trylesinski) in `starlette@1.3.1`. The issue was
+reported independently by several researchers — I am one of the credited reporters on the
+advisory. Affected range: `>= 0.4.1, < 1.3.1`.
 
 ## The gap
 
@@ -139,56 +144,78 @@ there it's a fifteen-minute walk through `Request._get_form` to confirm the kwar
 passed to `FormParser`, and through `FormParser.__init__` to confirm there's nowhere to pass
 them anyway.
 
-## Suggested patch
+## The fix that shipped
 
-Two changes are needed; the patch in flight does both.
+The maintainer closed the gap across two commits, released in `1.3.1`. Both of the changes I
+expected from reading the code landed, and the enforcement point ended up cleaner than I had
+sketched.
 
-**1. Extend `FormParser` to accept the limits.**
+**1. `FormParser` learned the limits** ([#3329](https://github.com/Kludex/starlette/pull/3329)).
+Its `__init__` gained the two keyword-only guards, with defaults matching
+`multipart/form-data`:
 
 ```python
+# starlette/formparsers.py
 class FormParser:
     def __init__(
         self,
-        headers,
-        stream,
+        headers: Headers,
+        stream: AsyncGenerator[bytes, None],
         *,
-        max_fields: int = 1000,
-        max_part_size: int = 1024 * 1024,
-    ):
+        max_fields: int | float = 1000,
+        max_part_size: int = 1024 * 1024,  # 1MB
+    ) -> None:
+        ...
         self.max_fields = max_fields
         self.max_part_size = max_part_size
-        ...
 ```
 
-**2. Enforce them during parsing — both at the field-count level and the body-size level.**
-
-The cleanest way is to pass `max_size` straight into the underlying parser:
-
-```python
-parser = QuerystringParser(
-    callbacks=callbacks,
-    max_size=self.max_part_size,
-)
-```
-
-and to bump a field counter inside the field callback, raising once it crosses
-`max_fields`.
-
-**3. Plumb the values from `Request._get_form`.**
+**2. `Request._get_form` now plumbs the values through** — and, crucially, wraps the url-encoded
+path in the same `MultiPartException → HTTPException(400)` handler the multipart path already
+had, so the limit failure becomes a clean `400` instead of a surfaced exception:
 
 ```python
+# starlette/requests.py
 elif content_type == b"application/x-www-form-urlencoded":
-    form_parser = FormParser(
-        self.headers,
-        self.stream(),
-        max_fields=max_fields,
-        max_part_size=max_part_size,
-    )
+    try:
+        form_parser = FormParser(
+            self.headers,
+            self.stream(),
+            max_fields=max_fields,
+            max_part_size=max_part_size,
+        )
+        self._form = await form_parser.parse()
+    except MultiPartException as exc:
+        if "app" in self.scope:
+            raise HTTPException(status_code=400, detail=exc.message)
+        raise exc
 ```
 
-With those three edits, `Request.form(max_fields=10, max_part_size=512)` behaves the same way
-regardless of whether the body is multipart or URL-encoded, and the documented contract is
-restored.
+**3. Enforcement moved into the parser callbacks**
+([#3331](https://github.com/Kludex/starlette/pull/3331)). The first cut counted fields and
+summed sizes in the message-drain loop; the follow-up pushed the checks into
+`on_field_name`, `on_field_data`, and `on_field_end`, so the parser raises *as it reads* rather
+than after a field has already been accumulated in memory:
+
+```python
+def on_field_name(self, data: bytes, start: int, end: int) -> None:
+    self._current_field_size += end - start
+    if self._current_field_size > self.max_part_size:
+        raise MultiPartException(f"Field exceeded maximum size of {int(self.max_part_size / 1024)}KB.")
+    ...
+
+def on_field_end(self) -> None:
+    self._current_fields += 1
+    if self._current_fields > self.max_fields:
+        raise MultiPartException(f"Too many fields. Maximum number of fields is {self.max_fields}.")
+    ...
+```
+
+That ordering matters for the size variant of the attack: raising inside the callback means the
+oversized field is rejected while it is still arriving, before 50 MB has been buffered into a
+`bytearray`. With these changes, `Request.form(max_fields=10, max_part_size=512)` behaves
+identically for multipart and URL-encoded bodies, and the documented contract is restored.
+Upgrade to `1.3.1` or later.
 
 ## Why it matters
 
@@ -211,10 +238,8 @@ worker pool it scales linearly.
 | ------------ | ------------------------------------------------------------------------------ |
 | 2026-04-22   | Discovered during manual review. PoC and root-cause walk-through completed.    |
 | 2026-04-22   | Private security advisory opened on the upstream repository.                   |
-| Coordinated  | Patch in flight with maintainer. CVE pending.                                  |
-
-This page will be updated as the advisory transitions out of draft, the CVE is assigned, and
-the patched release lands.
+| 2026-06-12   | Fix released in `starlette@1.3.1` (PRs [#3329](https://github.com/Kludex/starlette/pull/3329), [#3331](https://github.com/Kludex/starlette/pull/3331)). |
+| 2026-06-15   | [GHSA-82w8-qh3p-5jfq](https://github.com/advisories/GHSA-82w8-qh3p-5jfq) / CVE-2026-54283 published, CVSS 7.5. |
 
 ## Takeaways
 

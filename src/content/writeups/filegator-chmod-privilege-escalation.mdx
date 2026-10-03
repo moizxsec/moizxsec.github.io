@@ -3,14 +3,18 @@ title: "FileGator v7.14.0 — Privilege Escalation via Unvalidated chmod Endpoin
 summary: "A low-privileged authenticated user with the chmod permission could set arbitrary Unix special permission bits (setuid, setgid, sticky) on any file or directory they could reach across all three storage adapters (Local, SFTP, FTP). With one recursive call, the entire repository tree could be flipped to setuid root."
 date: 2026-05-15
 severity: High
-cvss: 8.7
+cvss: 7.3
+cve: "CVE-2026-63358"
 cwe: "CWE-732"
 product: "FileGator"
-version: "≤ 7.14.0"
+version: "< 7.14.2"
 vendor: "filegator/filegator"
 status: "Patched"
-tags: ["privilege-escalation", "input-validation", "php", "responsible-disclosure"]
-advisory: "https://github.com/filegator/filegator/blob/master/CHANGELOG.md"
+ecosystem: "Packagist"
+fixedIn: "7.14.2"
+cvssVector: "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:L"
+tags: ["privilege-escalation", "input-validation", "php", "responsible-disclosure", "cwe-732"]
+advisory: "https://www.cve.org/CVERecord?id=CVE-2026-63358"
 order: 1
 featured: true
 type: "Disclosure"
@@ -31,8 +35,10 @@ integer the client wanted to send — including values that set the `setuid`, `s
 Any user with the `chmod` capability — which by default is granted to the standard `user` role
 — could therefore upload a binary, mark it `4777`, and obtain code execution as the file owner
 on the next invocation. On most deployments that file owner is `www-data` or `root`. The bug
-was reported on **2026-05-15**, patched in **v7.14.2 on 2026-05-18**, and credited in the
-[FileGator changelog](https://github.com/filegator/filegator/blob/master/CHANGELOG.md).
+was reported on **2026-05-15**, patched in **v7.14.2 on 2026-05-18**, credited in the
+[FileGator changelog](https://github.com/filegator/filegator/blob/master/CHANGELOG.md), and
+later assigned [**CVE-2026-63358**](https://www.cve.org/CVERecord?id=CVE-2026-63358) (CWE-732)
+by CISA.
 
 ## The endpoint
 
@@ -283,7 +289,7 @@ Functional behaviour is preserved; the exotic codepath is closed.
 
 ## A second finding while testing the fix
 
-While retesting, the new validation path was reachable but it surfaced the exception as an
+While retesting, the new validation path fired as intended, but it surfaced the exception as an
 unhandled PHP fatal error. The full stack trace — including the absolute filesystem path of
 the FileGator install — was returned in the HTTP response body. Not a security control
 bypass, but a useful piece of reconnaissance for a follow-up attack and a real footgun for
@@ -328,4 +334,14 @@ released the fix within three days of the report. The relevant changelog entry:
 > Security fix: validate permission bits when using chmod, reported by Abdul Moiz
 > (https://github.com/moizxsec).
 
-A CVE request has been submitted; it will be linked here once assigned.
+CISA (as the CNA, `cisa-cg`) later assigned
+[**CVE-2026-63358**](https://www.cve.org/CVERecord?id=CVE-2026-63358), CWE-732 *Incorrect
+Permission Assignment for Critical Resource*, published 2026-07-21, sole credit **Abdul Moiz**.
+The official scoring reflects the authenticated-local nature of the chmod capability:
+
+- **CVSS 3.1: 7.3 (High)** — `AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:L`
+- **CVSS 4.0: 8.4 (High)** — `AV:L/AC:L/AT:N/PR:L/UI:N/VC:H/VI:H/VA:L/SC:N/SI:N/SA:N`
+
+The `AV:L` (local) vector is the honest call: exploitation requires an authenticated session
+with the `chmod` capability, so it is a privilege-escalation primitive for someone already
+inside the application, not an unauthenticated network take-over.

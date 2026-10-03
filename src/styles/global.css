@@ -1,9 +1,85 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* ------------------------------------------------------------------
+   Design tokens
+   Dark is the identity; light is a first-class alternative for long
+   reads. Every colour below is an RGB triplet consumed by Tailwind
+   (see tailwind.config.mjs) and by the raw CSS further down.
+   ------------------------------------------------------------------ */
+:root,
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  --c-bg: 10 10 12;
+  --c-elev: 16 16 19;
+  --c-sub: 22 22 26;
+  --c-line: 33 33 39;
+  --c-line-strong: 48 48 56;
+  --c-fg: 236 234 230;
+  --c-muted: 160 160 170;
+  --c-faint: 106 106 118;
+  --c-accent: 255 98 56;
+  --c-accent-fg: 10 10 12;
+
+  --sev-critical: 248 113 113;
+  --sev-high: 251 146 60;
+  --sev-medium: 250 204 21;
+  --sev-low: 96 165 250;
+  --sev-info: 161 161 170;
+
+  --st-ok: 74 222 128;
+  --st-warn: 251 191 36;
+  --st-info: 96 165 250;
+
+  --grid-line: 255 255 255;
+  --grid-alpha: 0.035;
+  --code-bg: 13 13 16;
+
+  /* Hero aurora: warm accent wash + a cooler neutral counterweight. Alphas are
+     deliberately tiny — the effect should read as depth, not as colour. */
+  --aurora-a: 0.085;
+  --aurora-b: 0.035;
+
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+[data-theme='light'] {
+  color-scheme: light;
+
+  --c-bg: 250 250 249;
+  --c-elev: 255 255 255;
+  --c-sub: 244 244 242;
+  --c-line: 228 228 225;
+  --c-line-strong: 205 205 200;
+  --c-fg: 24 24 27;
+  --c-muted: 82 82 91;
+  --c-faint: 132 132 142;
+  --c-accent: 194 65 12;
+  --c-accent-fg: 255 255 255;
+
+  --sev-critical: 185 28 28;
+  --sev-high: 194 65 12;
+  --sev-medium: 161 98 7;
+  --sev-low: 29 78 216;
+  --sev-info: 82 82 91;
+
+  --st-ok: 21 128 61;
+  --st-warn: 180 83 9;
+  --st-info: 29 78 216;
+
+  --grid-line: 0 0 0;
+  --grid-alpha: 0.05;
+  --code-bg: 250 250 249;
+
+  --aurora-a: 0.06;
+  --aurora-b: 0.025;
+}
+
+/* ------------------------------------------------------------------
+   Base
+   ------------------------------------------------------------------ */
 *,
 *::before,
 *::after {
@@ -12,24 +88,26 @@
 
 html {
   scroll-behavior: smooth;
+  scroll-padding-top: 5rem;
   font-feature-settings: 'cv11', 'ss01', 'ss03';
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  -webkit-text-size-adjust: 100%;
 }
 
 html,
 body {
   margin: 0;
   padding: 0;
-  background: #09090b;
-  color: #d4d4d8;
-  font-family: 'Inter', system-ui, sans-serif;
+  background: rgb(var(--c-bg));
+  color: rgb(var(--c-fg));
+  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
   line-height: 1.6;
 }
 
 ::selection {
-  background: #e34c26;
-  color: #09090b;
+  background: rgb(var(--c-accent));
+  color: rgb(var(--c-accent-fg));
 }
 
 a {
@@ -43,90 +121,344 @@ img {
   display: block;
 }
 
-/* Shiki code blocks */
-.astro-code,
-pre.astro-code {
-  background: #0d1117 !important;
-  border: 1px solid #1f1f23;
-  border-radius: 6px;
-  padding: 1rem 1.25rem;
-  overflow-x: auto;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 0.875rem;
-  line-height: 1.6;
-  margin: 1.5rem 0;
+/* Keyboard focus is always visible; mouse focus is not. */
+:focus-visible {
+  outline: 2px solid rgb(var(--c-accent));
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ------------------------------------------------------------------
+   Reusable primitives
+   ------------------------------------------------------------------ */
+@layer components {
+  /* Monospace section label — the small caps "// advisories" marker. */
+  .label {
+    @apply font-mono text-2xs uppercase tracking-label text-faint;
+  }
+
+  .skip-link {
+    @apply sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[200]
+      focus:bg-accent focus:text-accent-fg focus:px-3 focus:py-2 focus:rounded font-mono text-xs;
+  }
+
+  .panel {
+    @apply border border-line rounded-md bg-elev/40;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1 font-mono text-2xs uppercase tracking-wider
+      text-muted border border-line rounded px-1.5 py-0.5 whitespace-nowrap;
+  }
+
+  .link-quiet {
+    @apply text-fg underline decoration-line-strong underline-offset-[3px]
+      hover:decoration-accent transition-colors;
+  }
+
+  .btn {
+    @apply inline-flex items-center gap-2 font-mono text-xs rounded border px-3 py-2;
+    transition:
+      color 0.15s,
+      background-color 0.15s,
+      border-color 0.15s,
+      transform 0.15s var(--ease-out);
+  }
+  .btn:active {
+    transform: translateY(1px);
+  }
+  .btn > [aria-hidden='true'] {
+    display: inline-block;
+    transition: transform 0.2s var(--ease-out);
+  }
+  .btn:hover > [aria-hidden='true'] {
+    transform: translateX(2px);
+  }
+  .btn-primary {
+    @apply btn bg-fg text-bg border-fg hover:bg-accent hover:border-accent hover:text-accent-fg;
+  }
+  .btn-ghost {
+    @apply btn border-line text-muted hover:text-fg hover:border-line-strong;
+  }
+}
+
+/* Theme toggle icon: show the one that describes the *other* theme. */
+[data-theme='light'] .theme-icon-sun,
+html:not([data-theme='light']) .theme-icon-moon {
+  display: none;
+}
+
+/* Subtle engineering grid behind the hero. Masked so it fades, never shouts.
+   The pattern sits on an oversized pseudo-element so it can drift by exactly one
+   cell and loop without a seam; the drift itself is defined in the Motion section. */
+.grid-bg {
+  overflow: hidden;
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, #000 30%, transparent 100%);
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, #000 30%, transparent 100%);
+}
+.grid-bg::before {
+  content: '';
+  position: absolute;
+  inset: -32px;
+  background-image:
+    linear-gradient(rgb(var(--grid-line) / var(--grid-alpha)) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(var(--grid-line) / var(--grid-alpha)) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+/* ------------------------------------------------------------------
+   Severity + status colouring (data-attribute driven, theme aware)
+   ------------------------------------------------------------------ */
+.sev {
+  --sev: var(--sev-info);
+  color: rgb(var(--sev));
+  border-color: rgb(var(--sev) / 0.35);
+  background: rgb(var(--sev) / 0.08);
+}
+.sev[data-sev='Critical'] { --sev: var(--sev-critical); }
+.sev[data-sev='High']     { --sev: var(--sev-high); }
+.sev[data-sev='Medium']   { --sev: var(--sev-medium); }
+.sev[data-sev='Low']      { --sev: var(--sev-low); }
+.sev[data-sev='Informational'] { --sev: var(--sev-info); }
+
+.sev-dot {
+  background: rgb(var(--sev));
+  box-shadow: 0 0 0 3px rgb(var(--sev) / 0.18);
+}
+
+.status {
+  --st: var(--c-muted);
+  color: rgb(var(--st));
+  border-color: rgb(var(--st) / 0.35);
+}
+.status[data-status='Patched']     { --st: var(--st-ok); }
+.status[data-status='Public']      { --st: var(--c-muted); }
+.status[data-status='Coordinated'] { --st: var(--st-warn); }
+.status[data-status='Reported']    { --st: var(--st-info); }
+.status[data-status='Draft']       { --st: var(--c-faint); }
+
+/* CVSS meter: ten cells, filled count = round(score). */
+.cvss-meter {
+  display: inline-grid;
+  grid-template-columns: repeat(10, 1fr);
+  gap: 2px;
+  width: 5.5rem;
+  height: 0.375rem;
+}
+.cvss-meter > i {
+  display: block;
+  border-radius: 1px;
+  background: rgb(var(--c-line-strong));
+}
+.cvss-meter > i.on {
+  background: rgb(var(--sev, var(--c-muted)));
+}
+
+/* ------------------------------------------------------------------
+   Writeups index filter — CSS does the hiding, JS only flips attributes.
+   Without JS nothing is hidden, so every entry is still reachable.
+   ------------------------------------------------------------------ */
+.filter-chip[aria-pressed='true'] {
+  color: rgb(var(--c-fg));
+  border-color: rgb(var(--c-accent));
+  background: rgb(var(--c-accent) / 0.1);
+}
+.writeup-row[hidden] {
+  display: none;
+}
+
+/* ------------------------------------------------------------------
+   Code blocks (Shiki, dual theme). The pre carries --shiki-dark/-light
+   variables; we pick one with the theme tokens above.
+   ------------------------------------------------------------------ */
+.astro-code,
+pre.astro-code {
+  position: relative;
+  color: var(--shiki-dark);
+  background-color: rgb(var(--code-bg)) !important;
+  border: 1px solid rgb(var(--c-line));
+  border-radius: 6px;
+  padding: 1.125rem 1.25rem;
+  overflow-x: auto;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.8125rem;
+  line-height: 1.65;
+  margin: 1.5rem 0;
+  tab-size: 2;
+}
+/* Custom properties resolve where they are declared, so the theme switch has to
+   name the Shiki variable directly rather than go through a :root alias. */
+.astro-code span {
+  color: var(--shiki-dark);
+  font-style: var(--shiki-dark-font-style, inherit);
+  font-weight: var(--shiki-dark-font-weight, inherit);
+}
+[data-theme='light'] .astro-code,
+[data-theme='light'] pre.astro-code {
+  color: var(--shiki-light);
+}
+[data-theme='light'] .astro-code span {
+  color: var(--shiki-light);
+  font-style: var(--shiki-light-font-style, inherit);
+  font-weight: var(--shiki-light-font-weight, inherit);
+}
 .astro-code code {
+  display: block;
   background: transparent;
   padding: 0;
+  min-width: max-content;
+}
+
+/* Language tag + copy button live in a toolbar injected by WriteupLayout. */
+.code-wrap {
+  position: relative;
+  margin: 1.5rem 0;
+}
+.code-wrap > .astro-code {
+  margin: 0;
+  padding-top: 2.25rem;
+}
+.code-tools {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.375rem 0.625rem 0 0.875rem;
+  pointer-events: none;
+}
+.code-lang {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.625rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgb(var(--c-faint));
+}
+.code-copy {
+  pointer-events: auto;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.625rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgb(var(--c-faint));
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 0.125rem 0.5rem;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.code-copy:hover,
+.code-copy:focus-visible {
+  color: rgb(var(--c-fg));
+  border-color: rgb(var(--c-line-strong));
+}
+.code-copy {
+  min-width: 4.25rem;
+  text-align: center;
+}
+.code-copy[data-done='true'] {
+  color: rgb(var(--st-ok));
+  border-color: rgb(var(--st-ok) / 0.4);
+  animation: copy-pop 0.3s var(--ease-out);
 }
 
 /* Inline code */
 :not(pre) > code {
   word-break: break-word;
-  background: #1f1f23;
-  border: 1px solid #2a2a2f;
+  background: rgb(var(--c-sub));
+  border: 1px solid rgb(var(--c-line));
   border-radius: 4px;
-  padding: 0.125rem 0.375rem;
+  padding: 0.1rem 0.35rem;
   font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 0.875em;
-  color: #f4f4f5;
+  font-size: 0.85em;
+  color: rgb(var(--c-fg));
 }
 
-/* Custom prose adjustments */
+/* ------------------------------------------------------------------
+   Long-form prose
+   ------------------------------------------------------------------ */
 .writeup-prose {
-  color: #d4d4d8;
-  font-size: 1rem;
+  color: rgb(var(--c-fg) / 0.88);
+  font-size: 1.0625rem;
   line-height: 1.75;
+  overflow-wrap: break-word;
+}
+
+.writeup-prose > :first-child {
+  margin-top: 0;
+}
+
+.writeup-prose h2,
+.writeup-prose h3,
+.writeup-prose h4 {
+  color: rgb(var(--c-fg));
+  font-weight: 600;
+  scroll-margin-top: 5.5rem;
+  position: relative;
 }
 
 .writeup-prose h2 {
-  color: #fafafa;
   font-size: 1.5rem;
-  font-weight: 600;
-  margin-top: 3rem;
+  line-height: 1.3;
+  margin-top: 3.25rem;
   margin-bottom: 1rem;
   padding-bottom: 0.5rem;
-  border-bottom: 1px solid #27272a;
-  letter-spacing: -0.01em;
+  border-bottom: 1px solid rgb(var(--c-line));
+  letter-spacing: -0.015em;
 }
 
 .writeup-prose h3 {
-  color: #fafafa;
-  font-size: 1.125rem;
-  font-weight: 600;
-  margin-top: 2rem;
+  font-size: 1.1875rem;
+  line-height: 1.4;
+  margin-top: 2.25rem;
   margin-bottom: 0.75rem;
-  letter-spacing: -0.005em;
+  letter-spacing: -0.01em;
 }
 
 .writeup-prose h4 {
-  color: #e4e4e7;
   font-size: 1rem;
-  font-weight: 600;
-  margin-top: 1.5rem;
+  margin-top: 1.75rem;
   margin-bottom: 0.5rem;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-weight: 500;
+  letter-spacing: 0.01em;
 }
 
 .writeup-prose p {
-  margin: 1rem 0;
+  margin: 1.05rem 0;
 }
 
 .writeup-prose a {
-  color: #fafafa;
+  color: rgb(var(--c-fg));
   text-decoration: underline;
-  text-decoration-color: #52525b;
+  text-decoration-color: rgb(var(--c-line-strong));
+  text-decoration-thickness: 1px;
   text-underline-offset: 3px;
   transition: text-decoration-color 0.15s;
 }
 
 .writeup-prose a:hover {
-  text-decoration-color: #e34c26;
+  text-decoration-color: rgb(var(--c-accent));
 }
 
 .writeup-prose strong {
-  color: #fafafa;
+  color: rgb(var(--c-fg));
   font-weight: 600;
 }
 
@@ -136,50 +468,73 @@ pre.astro-code {
   padding-left: 1.5rem;
 }
 
+.writeup-prose ul > li::marker {
+  color: rgb(var(--c-faint));
+}
+.writeup-prose ol > li::marker {
+  color: rgb(var(--c-muted));
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.85em;
+}
+
 .writeup-prose li {
-  margin: 0.5rem 0;
+  margin: 0.45rem 0;
+  padding-left: 0.25rem;
 }
 
 .writeup-prose blockquote {
-  border-left: 3px solid #e34c26;
-  padding-left: 1rem;
-  margin: 1.5rem 0;
-  color: #a1a1aa;
-  font-style: italic;
+  border-left: 2px solid rgb(var(--c-accent));
+  padding: 0.25rem 0 0.25rem 1.125rem;
+  margin: 1.75rem 0;
+  color: rgb(var(--c-muted));
+}
+.writeup-prose blockquote p {
+  margin: 0.5rem 0;
 }
 
 .writeup-prose hr {
   border: 0;
-  border-top: 1px solid #27272a;
-  margin: 2.5rem 0;
+  border-top: 1px solid rgb(var(--c-line));
+  margin: 2.75rem 0;
 }
 
 .writeup-prose img {
-  border: 1px solid #27272a;
+  border: 1px solid rgb(var(--c-line));
   border-radius: 6px;
   margin: 1.5rem auto;
+  background: rgb(var(--c-elev));
 }
 
 .writeup-prose figure {
-  margin: 1.5rem 0;
+  margin: 2rem 0;
+}
+.writeup-prose figure img {
+  margin: 0 auto;
 }
 
 .writeup-prose figcaption {
-  text-align: center;
+  text-align: left;
   font-size: 0.8125rem;
-  color: #71717a;
-  margin-top: 0.5rem;
-  font-family: 'JetBrains Mono', monospace;
+  line-height: 1.5;
+  color: rgb(var(--c-faint));
+  margin-top: 0.625rem;
+  padding-left: 0.75rem;
+  border-left: 2px solid rgb(var(--c-line-strong));
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
 }
 
+/* Tables scroll horizontally on narrow screens instead of breaking the column. */
 .writeup-prose table {
   width: 100%;
   border-collapse: collapse;
-  margin: 1.5rem 0;
-  font-size: 0.9375rem;
+  margin: 1.75rem 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
   display: block;
   overflow-x: auto;
   white-space: nowrap;
+  border: 1px solid rgb(var(--c-line));
+  border-radius: 6px;
 }
 
 @media (min-width: 768px) {
@@ -192,42 +547,52 @@ pre.astro-code {
 .writeup-prose th,
 .writeup-prose td {
   text-align: left;
+  vertical-align: top;
   padding: 0.625rem 0.875rem;
-  border-bottom: 1px solid #27272a;
+  border-bottom: 1px solid rgb(var(--c-line));
+}
+.writeup-prose tbody tr:last-child td {
+  border-bottom: 0;
 }
 
 .writeup-prose th {
-  background: #18181b;
-  color: #fafafa;
-  font-weight: 600;
-  font-size: 0.8125rem;
+  background: rgb(var(--c-sub));
+  color: rgb(var(--c-muted));
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-weight: 500;
+  font-size: 0.6875rem;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.1em;
 }
 
 .writeup-prose tbody tr:hover {
-  background: #131316;
+  background: rgb(var(--c-elev));
 }
 
-/* Heading anchor links (rehype-autolink-headings adds these) */
+.writeup-prose td code {
+  white-space: nowrap;
+}
+
+/* Heading anchors (rehype-autolink-headings). */
 .writeup-prose h2 a.heading-anchor,
 .writeup-prose h3 a.heading-anchor,
 .writeup-prose h4 a.heading-anchor {
   margin-left: 0.5rem;
-  color: #3f3f46;
+  color: rgb(var(--c-faint));
   opacity: 0;
   transition: opacity 0.15s ease, color 0.15s ease;
   font-weight: 400;
   text-decoration: none;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
 }
 
 .writeup-prose h2:hover a.heading-anchor,
 .writeup-prose h3:hover a.heading-anchor,
-.writeup-prose h4:hover a.heading-anchor {
+.writeup-prose h4:hover a.heading-anchor,
+.writeup-prose a.heading-anchor:focus-visible {
   opacity: 1;
 }
 
-/* Touch devices have no hover — keep anchors permanently visible */
 @media (hover: none) {
   .writeup-prose h2 a.heading-anchor,
   .writeup-prose h3 a.heading-anchor,
@@ -236,24 +601,320 @@ pre.astro-code {
   }
 }
 
-.writeup-prose h2 a.heading-anchor:hover,
-.writeup-prose h3 a.heading-anchor:hover,
-.writeup-prose h4 a.heading-anchor:hover {
-  color: #e34c26;
+.writeup-prose a.heading-anchor:hover {
+  color: rgb(var(--c-accent));
 }
 
-/* Reading progress bar */
+/* ------------------------------------------------------------------
+   Table of contents
+   ------------------------------------------------------------------ */
+.toc a {
+  display: block;
+  padding: 0.3rem 0 0.3rem 0.875rem;
+  border-left: 1px solid rgb(var(--c-line));
+  color: rgb(var(--c-faint));
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  transition: color 0.15s, border-color 0.15s;
+}
+.toc a[data-depth='3'] {
+  padding-left: 1.75rem;
+  font-size: 0.75rem;
+}
+.toc a:hover {
+  color: rgb(var(--c-fg));
+}
+.toc a[aria-current='true'] {
+  color: rgb(var(--c-fg));
+  border-left-color: rgb(var(--c-accent));
+}
+
+/* Collapsible mobile TOC */
+details.toc-mobile > summary {
+  list-style: none;
+  cursor: pointer;
+}
+details.toc-mobile > summary::-webkit-details-marker {
+  display: none;
+}
+details.toc-mobile[open] > summary .toc-caret {
+  transform: rotate(90deg);
+}
+
+/* Reading progress */
 .reading-progress {
   position: fixed;
   top: 0;
   left: 0;
   height: 2px;
-  background: linear-gradient(90deg, #e34c26 0%, #f97316 100%);
+  background: rgb(var(--c-accent));
   z-index: 100;
   transition: width 0.05s linear;
 }
 
-/* Smooth scroll for anchor targets */
-html {
-  scroll-padding-top: 4rem;
+
+/* ------------------------------------------------------------------
+   Motion
+   Rules of the house: transforms and opacity only; nothing moves that the
+   reader has to chase; everything below collapses to its final frame under
+   prefers-reduced-motion (the global rule above zeroes every duration, and
+   the ambient loops are additionally wrapped in no-preference so they never
+   even start). Nothing here hides content without JavaScript — the scroll
+   reveal only enters its hidden state once the script has confirmed the
+   element is below the fold.
+   ------------------------------------------------------------------ */
+
+/* Hero: two soft radial washes drifting on long, offset periods. */
+.hero-aurora {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.hero-aurora::before,
+.hero-aurora::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+}
+.hero-aurora::before {
+  width: 48rem;
+  height: 48rem;
+  top: -26rem;
+  left: -12rem;
+  background: radial-gradient(closest-side, rgb(var(--c-accent) / var(--aurora-a)), transparent 72%);
+}
+.hero-aurora::after {
+  width: 42rem;
+  height: 42rem;
+  top: -16rem;
+  right: -16rem;
+  background: radial-gradient(closest-side, rgb(var(--c-fg) / var(--aurora-b)), transparent 72%);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .hero-aurora::before {
+    animation: aurora-a 38s ease-in-out infinite alternate;
+    will-change: transform;
+  }
+  .hero-aurora::after {
+    animation: aurora-b 46s ease-in-out infinite alternate;
+    will-change: transform;
+  }
+  .grid-bg::before {
+    animation: grid-drift 36s linear infinite;
+  }
+}
+@keyframes aurora-a {
+  to {
+    transform: translate3d(11rem, 5rem, 0) scale(1.07);
+  }
+}
+@keyframes aurora-b {
+  to {
+    transform: translate3d(-9rem, 6rem, 0) scale(0.95);
+  }
+}
+/* One full cell per cycle so the loop point is invisible. */
+@keyframes grid-drift {
+  to {
+    transform: translate3d(32px, 32px, 0);
+  }
+}
+
+/* Entrance for above-the-fold hero elements. Pure CSS, so it also runs without
+   JS and always lands on the visible state. Delays stay short (≤ 300ms). */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .rise {
+    animation: rise 0.65s var(--ease-out) both;
+    animation-delay: calc(var(--d, 0) * 75ms);
+  }
+}
+
+/* Scroll reveal. `data-reveal="pending"` is set by Motion.astro only for elements
+   that start below the viewport, so first paint and no-JS are both untouched. */
+.reveal[data-reveal='pending'] {
+  opacity: 0;
+  transform: translateY(12px);
+}
+.reveal[data-reveal='pending'].is-in {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity 0.55s var(--ease-out) var(--reveal-delay, 0ms),
+    transform 0.55s var(--ease-out) var(--reveal-delay, 0ms);
+}
+/* Table rows only fade: transforms on table-row boxes are still uneven across engines. */
+tr.reveal[data-reveal='pending'] {
+  transform: none;
+}
+@media print {
+  .reveal {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
+/* Portrait: slightly desaturated with a faint scanline veil at rest; hover or
+   focus brings it to full colour. Reads as print, not as glitch. */
+.portrait {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  background: rgb(var(--c-elev));
+}
+.portrait > img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: saturate(0.72) contrast(1.04);
+  transform: translateZ(0);
+  transition:
+    filter 0.6s ease,
+    transform 0.9s var(--ease-out);
+}
+.portrait::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    rgb(var(--c-bg) / 0.22) 0 1px,
+    transparent 1px 3px
+  );
+  transition: opacity 0.6s ease;
+}
+.portrait:hover > img,
+.portrait:focus-within > img {
+  filter: none;
+  transform: translateZ(0) scale(1.025);
+}
+.portrait:hover::after,
+.portrait:focus-within::after {
+  opacity: 0;
+}
+@media (hover: none) {
+  .portrait > img {
+    filter: saturate(0.88);
+  }
+}
+
+/* CVSS meter cells fill left-to-right on load. CSS-only; without JS or with
+   reduced motion the cells are simply there. */
+@keyframes meter-fill {
+  from {
+    transform: scaleX(0);
+    opacity: 0.35;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .cvss-meter > i.on {
+    transform-origin: left center;
+    animation: meter-fill 0.4s var(--ease-out) both;
+    animation-delay: calc(0.3s + var(--n, 0) * 45ms);
+  }
+}
+
+/* Primary nav: hairline that grows from the left on hover; held for the current page. */
+.nav-link {
+  position: relative;
+}
+.nav-link::after {
+  content: '';
+  position: absolute;
+  left: 0.5rem;
+  right: 0.5rem;
+  bottom: 1px;
+  height: 1px;
+  background: rgb(var(--c-accent));
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 0.25s var(--ease-out);
+}
+.nav-link:hover::after,
+.nav-link:focus-visible::after,
+.nav-link[aria-current='page']::after {
+  transform: scaleX(1);
+}
+
+/* Arrow links ("view all →"): the glyph nudges, the text does not move. */
+.arrow-link > [aria-hidden='true'] {
+  display: inline-block;
+  transition: transform 0.2s var(--ease-out);
+}
+.arrow-link:hover > [aria-hidden='true'] {
+  transform: translateX(2px);
+}
+
+/* Logo: the underscore in the monogram is a cursor; it only blinks when addressed. */
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .group:hover .logo-cursor,
+  .group:focus-visible .logo-cursor {
+    animation: blink 1s steps(1) infinite;
+  }
+}
+
+/* Theme toggle: the icon tilts on hover, compresses on press. */
+#theme-toggle svg {
+  transition: transform 0.25s var(--ease-out);
+}
+#theme-toggle:hover svg {
+  transform: rotate(-15deg);
+}
+#theme-toggle:active svg {
+  transform: scale(0.9);
+}
+/* Header.astro adds this class for ~350ms around a theme switch so the whole page
+   cross-fades instead of snapping. Reduced-motion zeroes it via the global rule. */
+.theme-switching,
+.theme-switching *,
+.theme-switching *::before,
+.theme-switching *::after {
+  transition:
+    background-color 0.3s ease,
+    color 0.3s ease,
+    border-color 0.3s ease,
+    fill 0.3s ease,
+    stroke 0.3s ease;
+}
+
+/* Writeup rows: a hairline accent that grows in on hover. Featured rows already
+   carry a permanent bar, so the hover one steps aside there. */
+.writeup-row > a::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 1.25rem;
+  bottom: 1.25rem;
+  width: 2px;
+  background: rgb(var(--c-accent));
+  opacity: 0.8;
+  transform: scaleY(0);
+  transform-origin: center;
+  transition: transform 0.25s var(--ease-out);
+}
+.writeup-row > a:hover::before,
+.writeup-row > a:focus-visible::before {
+  transform: scaleY(1);
+}
+.writeup-row > a:has(> .featured-bar)::before {
+  display: none;
+}
+
+@keyframes copy-pop {
+  40% {
+    transform: scale(1.06);
+  }
 }

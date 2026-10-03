@@ -1,0 +1,209 @@
+---
+title: "flat-to-nested — Prototype Pollution via a __proto__ Parent Key"
+summary: "flat-to-nested turns a flat list of records into a parent/child tree by using each record's id and parent field directly as object keys on a plain {} lookup table. A single record whose parent is the string \"__proto__\" walks the prototype chain to Object.prototype and writes attacker-controlled data onto every object in the process — the package's exact core purpose (building trees from DB/REST/user-derived records) is the delivery path. CVE-2026-55091, patched in 1.1.2."
+date: 2026-06-19
+severity: High
+cvss: 7.5
+cve: "CVE-2026-55091"
+ghsa: "GHSA-hp36-v28f-w3r4"
+cwe: "CWE-1321"
+product: "flat-to-nested"
+version: "≤ 1.1.1"
+vendor: "joaonuno/flat-to-nested-js"
+status: "Patched"
+ecosystem: "npm"
+fixedIn: "1.1.2"
+cvssVector: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:H/A:N"
+tags: ["prototype-pollution", "javascript", "npm", "supply-chain", "responsible-disclosure", "cwe-1321"]
+advisory: "https://github.com/advisories/GHSA-hp36-v28f-w3r4"
+order: 3
+featured: true
+type: "Disclosure"
+readingTime: 7
+---
+
+[`flat-to-nested`](https://www.npmjs.com/package/flat-to-nested) is a small, long-lived npm
+utility — around 6,000 downloads a week — that does one thing: take a flat array of records,
+each carrying an `id` and a `parent`, and fold it into a nested tree. It is the sort of
+dependency you add once, three layers down, and never think about again. That is exactly why
+it is worth thinking about.
+
+The package's entire job is to build a tree out of records whose `id` and `parent` values come
+from somewhere — a database, a REST payload, a CSV, a form. In `convert()` those two fields
+are used **directly as object keys** on a plain `{}` lookup table, with no guard against the
+three magic names JavaScript reserves. Feed it one record whose `parent` is the string
+`"__proto__"` and the write lands on `Object.prototype` — polluting every object the process
+will ever create.
+
+This is [CVE-2026-55091](https://github.com/advisories/GHSA-hp36-v28f-w3r4)
+([GHSA-hp36-v28f-w3r4](https://github.com/advisories/GHSA-hp36-v28f-w3r4)), CVSS 7.5,
+[CWE-1321 Prototype Pollution](https://cwe.mitre.org/data/definitions/1321.html). Reported,
+root-caused, and fixed; the patch and regression tests shipped in `1.1.2`.
+
+## The sink
+
+All of `convert()` fits on a screen. The relevant lines, from `index.js` at `1.1.1`:
+
+```js
+// index.js — FlatToNested.prototype.convert (abridged, pre-patch)
+temp = {};              // line 45
+pendingChildOf = {};    // line 46
+
+for (i = 0, len = flat.length; i < len; i++) {
+  flatEl = flat[i];
+  id = flatEl[this.config.id];        // straight from the record
+  parent = flatEl[this.config.parent]; // straight from the record
+
+  // ...
+
+  if (temp[parent] !== undefined) {           // line 57
+    initPush(this.config.children, temp[parent], flatEl); // line 59
+  } else {
+    // defer until the parent shows up
+    initPush(this.config.id, pendingChildOf, flatEl, parent);
+  }
+}
+```
+
+Two things make this exploitable, and both come from one decision — using `{}` for the lookup
+tables:
+
+1. `temp` and `pendingChildOf` are **plain objects**, so they inherit from `Object.prototype`.
+2. `parent` is used as a **dynamic key** with no sanitisation: `temp[parent]`,
+   `pendingChildOf[parent]`, `temp[id]`.
+
+Now set `parent = "__proto__"`. On line 57, `temp["__proto__"]` does not look up a missing own
+property and return `undefined` — it resolves *through the prototype chain* to
+`Object.prototype`, which is very much `!== undefined`. So the "parent already exists" branch
+is taken, and line 59 becomes, in effect:
+
+```js
+initPush("children", Object.prototype, flatEl);
+```
+
+`initPush` is where the write happens:
+
+```js
+// index.js — initPush
+function initPush(key, obj, el) {
+  if (obj[key] === undefined) {
+    obj[key] = [];       // Object.prototype["children"] = []
+  }
+  obj[key].push(el);     // Object.prototype["children"].push(attacker record)
+}
+```
+
+That second line writes attacker-controlled data onto the global prototype. Every object
+created afterward — including ones in completely unrelated parts of the application — now
+carries that property.
+
+## Proof of concept
+
+```js
+const FlatToNested = require('flat-to-nested');
+
+new FlatToNested().convert([
+  { id: 1, parent: '__proto__', polluted: 'PWNED' }
+]);
+
+// A fresh, unrelated object now carries attacker data:
+console.log(({}).children);
+// => [ { id: 1, parent: '__proto__', polluted: 'PWNED' } ]
+```
+
+One record. No special configuration, no privileges, no second request. And it is **stealthy**
+— the existing prototype methods are untouched, so `({}).toString === Object.prototype.toString`
+stays `true` and nothing visibly breaks. The gadget is a new property, not a corrupted one.
+
+If the consumer has configured a custom `children` key, that key is the one polluted instead —
+the technique follows the configuration.
+
+## Why the severity is real, not theoretical
+
+Prototype pollution is one of those classes people wave off as "you'd have to be passing
+untrusted data to it." Here, passing externally-derived records *is the documented use of the
+package*. The flat→nested shape shows up for exactly the data that tends to be attacker-
+influenced:
+
+- category / comment / org-chart trees built from database rows,
+- menu or permission trees assembled from a REST response,
+- any "parent id" hierarchy where the parent value originates in user input.
+
+Once `Object.prototype` carries an attacker-controlled property, the impact is bounded only by
+what the rest of the process does with objects afterward. The CVSS vector
+(`AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:H/A:N`) captures the shape: network-reachable, no privileges,
+no interaction, **high integrity impact**, no direct confidentiality or availability loss on
+its own. The integrity hit is the whole story — polluted prototypes corrupt application logic,
+and depending on downstream sinks can escalate toward denial of service or, with the right
+gadget chain, remote code execution. It is a primitive, and a clean one.
+
+## Discovery
+
+I was auditing the dependency tree of a Node service that built a category hierarchy from
+user-submitted records, and `flat-to-nested` sat on the path between "untrusted input" and
+"tree." The audit habit that catches this class is simple: wherever a value from input is used
+as an **object key**, check whether the key space is constrained. Here it was not — `id` and
+`parent` flowed straight into `temp[...]`, `pendingChildOf[...]`, and back out through
+`initPush`, with nothing in between rejecting `__proto__`, `constructor`, or `prototype`.
+
+Confirming it was a two-line PoC. The record with `parent: '__proto__'` polluted a bystander
+object on the first try.
+
+## The fix
+
+The cleanest fix removes the prototype chain from the lookup tables entirely, rather than
+blocklisting individual key names. `Object.create(null)` produces an object with **no
+prototype**, so `__proto__`/`constructor`/`prototype` become ordinary, harmless own keys that
+cannot reach `Object.prototype`:
+
+```js
+// index.js — patched (1.1.2)
+// Use prototype-less maps for the id/parent lookup tables. `id` and
+// `parent` come straight from input records and are used as object keys,
+// so a plain `{}` lets a record with `parent === '__proto__'` resolve
+// `temp[parent]` to `Object.prototype` and pollute the global prototype
+// via initPush. `Object.create(null)` has no inherited keys, so
+// `__proto__`/`constructor`/`prototype` are ordinary (harmless) own keys.
+temp = Object.create(null);
+pendingChildOf = Object.create(null);
+```
+
+With both tables prototype-less, `temp["__proto__"]` is now `undefined` for a fresh table
+(because there is no inherited `__proto__` to find), so the "parent exists" branch is no longer
+taken by accident, and `initPush` can never be handed `Object.prototype`. Normal nesting
+output is byte-for-byte unchanged — verified against the existing test suite plus new
+regression tests covering `__proto__` as a `parent`, `__proto__` as an `id`, and a plain
+happy-path nesting case.
+
+I prefer `Object.create(null)` over a `if (key === '__proto__') continue` style denylist for
+two reasons: it is exhaustive (no forgotten magic name, no engine-specific accessor), and it
+is structural — the property is gone because the chain is gone, not because a check happened to
+run. Optionally a consumer can also reject `id`/`parent` values equal to the three reserved
+names, but with prototype-less tables that is defence in depth, not the fix.
+
+The change landed upstream and shipped as `flat-to-nested@1.1.2`. Anything on `≤ 1.1.1` should
+upgrade; there is no behavioural change to account for.
+
+## Timeline
+
+| Date         | Event                                                                           |
+| ------------ | ------------------------------------------------------------------------------- |
+| 2026-06      | Found during a dependency audit; two-line PoC confirms `Object.prototype` write. |
+| 2026-06      | Private report to the maintainer with root cause, PoC, and a patch + tests.      |
+| 2026-06-10   | Fix released to npm as `flat-to-nested@1.1.2`.                                   |
+| 2026-06-19   | [GHSA-hp36-v28f-w3r4](https://github.com/advisories/GHSA-hp36-v28f-w3r4) / CVE-2026-55091 published. |
+
+## Takeaways
+
+- **An object key is a trust boundary.** Any time a value from input becomes a property key,
+  the three reserved names (`__proto__`, `constructor`, `prototype`) are in play. Audit for the
+  pattern `obj[userValue]`, not just for the word "pollution."
+- **`Object.create(null)` beats a denylist for lookup tables.** If a map only ever holds
+  arbitrary string keys, give it no prototype. The attack surface disappears structurally
+  instead of depending on a check that someone has to remember to keep correct.
+- **Small, old, low-glamour dependencies are prime real estate.** A utility that does one
+  obvious thing attracts no scrutiny and sits deep in the tree. That obscurity is the risk, not
+  a mitigation.
+- **The package's happy path was the exploit path.** When the documented, intended use of a
+  library is "feed me records from your data source," untrusted input is not an edge case — it
+  is the spec.

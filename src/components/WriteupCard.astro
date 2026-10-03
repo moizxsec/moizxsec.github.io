@@ -1,91 +1,57 @@
 ---
 import SeverityBadge from './SeverityBadge.astro';
+import { advisoryId, isAdvisory, isoDate, readingTime, type Writeup } from '../lib/writeups';
 
 interface Props {
-  slug: string;
-  title: string;
-  summary: string;
-  date: Date;
-  severity: 'Critical' | 'High' | 'Medium' | 'Low' | 'Informational';
-  cvss?: number;
-  product: string;
-  tags: string[];
-  type?: 'Disclosure' | 'Research' | 'Class' | 'Architecture' | 'Incident Response';
-  readingTime?: number;
-  featured?: boolean;
+  entry: Writeup;
+  /** Compact rows drop the summary; used for dense lists. */
+  compact?: boolean;
 }
 
-const {
-  slug,
-  title,
-  summary,
-  date,
-  severity,
-  cvss,
-  product,
-  tags,
-  type,
-  readingTime,
-  featured = false,
-} = Astro.props;
-const dateStr = date.toISOString().slice(0, 10);
+const { entry, compact = false } = Astro.props;
+const d = entry.data;
+const dateStr = isoDate(d.date);
+const adv = isAdvisory(entry) ? advisoryId(entry) : null;
+const mins = readingTime(entry);
 ---
 
-<a
-  href={`/writeups/${slug}`}
-  class={`block group border-b border-zinc-900 py-6 hover:bg-zinc-925/40 -mx-6 px-6 transition-colors ${featured ? 'relative' : ''}`}
+<li
+  class="writeup-row reveal list-none"
+  data-type={d.type}
+  data-tags={d.tags.join(' ')}
+  data-severity={d.severity}
 >
-  {
-    featured && (
-      <span class="absolute left-0 top-6 bottom-6 w-[2px] bg-orange-600/60" />
-    )
-  }
-  <div class="flex items-center gap-x-3 gap-y-1.5 mb-2 text-xs font-mono text-zinc-500 flex-wrap">
-    <time datetime={dateStr}>{dateStr}</time>
-    <span class="text-zinc-800" aria-hidden="true">·</span>
-    <span class="text-zinc-400 truncate max-w-[200px] sm:max-w-none">{product}</span>
-    <span class="text-zinc-800" aria-hidden="true">·</span>
-    <SeverityBadge severity={severity} />
+  <a
+    href={`/writeups/${entry.slug}/`}
+    class="group relative block py-5 sm:py-6 border-b border-line hover:bg-elev/60 transition-colors -mx-4 px-4 sm:-mx-6 sm:px-6"
+  >
+    {d.featured && <span class="featured-bar absolute left-0 top-5 bottom-5 w-[2px] bg-accent" aria-hidden="true"></span>}
+
+    <div class="flex items-center gap-x-2.5 gap-y-1.5 mb-2 font-mono text-xs text-faint flex-wrap">
+      <time datetime={dateStr} class="tabular-nums">{dateStr}</time>
+      <span class="chip">{d.type}</span>
+      {adv && adv.kind !== 'none' && <span class="text-muted">{adv.id}</span>}
+      <span class="text-muted truncate max-w-[14rem] sm:max-w-xs hidden sm:inline">{d.product}</span>
+      <span class="ml-auto flex items-center gap-2.5">
+        <SeverityBadge severity={d.severity} cvss={d.cvss} />
+        <span class="hidden sm:inline tabular-nums">{mins} min</span>
+      </span>
+    </div>
+
+    <h3 class="text-base sm:text-lg font-semibold text-fg tracking-tight leading-snug group-hover:text-accent transition-colors break-words">
+      {d.title}
+    </h3>
+
+    {!compact && <p class="mt-1.5 text-sm text-muted leading-relaxed line-clamp-3">{d.summary}</p>}
+
     {
-      cvss && (
-        <>
-          <span class="text-zinc-800" aria-hidden="true">·</span>
-          <span class="text-zinc-500">CVSS {cvss.toFixed(1)}</span>
-        </>
+      !compact && d.tags.length > 0 && (
+        <ul class="mt-3 flex flex-wrap gap-1.5" aria-label="Tags">
+          {d.tags.slice(0, 6).map((tag) => (
+            <li class="font-mono text-2xs text-faint">#{tag}</li>
+          ))}
+        </ul>
       )
     }
-    {
-      type && (
-        <>
-          <span class="text-zinc-800 hidden sm:inline" aria-hidden="true">·</span>
-          <span class="text-[0.65rem] font-mono uppercase tracking-wider text-zinc-400 border border-zinc-800 rounded px-1.5 py-0.5 hidden sm:inline-block">
-            {type}
-          </span>
-        </>
-      )
-    }
-    {
-      readingTime && (
-        <>
-          <span class="text-zinc-800 hidden sm:inline" aria-hidden="true">·</span>
-          <span class="text-zinc-500 hidden sm:inline">{readingTime} min</span>
-        </>
-      )
-    }
-  </div>
-  <h3 class="text-lg font-semibold text-zinc-50 mb-1 group-hover:text-orange-300 transition-colors tracking-tight">
-    {title}
-  </h3>
-  <p class="text-sm text-zinc-400 leading-relaxed">{summary}</p>
-  {
-    tags.length > 0 && (
-      <div class="mt-3 flex flex-wrap gap-1.5">
-        {tags.slice(0, 5).map((tag) => (
-          <span class="text-[0.65rem] font-mono uppercase tracking-wider text-zinc-600 border border-zinc-800 rounded px-1.5 py-0.5">
-            {tag}
-          </span>
-        ))}
-      </div>
-    )
-  }
-</a>
+  </a>
+</li>

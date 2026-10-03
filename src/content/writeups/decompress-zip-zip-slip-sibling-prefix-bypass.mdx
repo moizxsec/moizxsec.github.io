@@ -1,0 +1,215 @@
+---
+title: "decompress-zip — Zip Slip Arbitrary File Write via a Sibling-Prefix Bypass (VU#987362)"
+summary: "decompress-zip was patched for classic ../../ Zip Slip back in 0.3.2. That fix still holds — but the guard it added is a string-prefix check (destination.indexOf(options.path) !== 0), and a string prefix is not a directory boundary. A zip entry resolving to /uploads/userdir-EVIL/x escapes /uploads/userdir because the string starts with the destination. The same library already uses a correct path.relative() check for its symlink handling, which makes the inconsistency glaring. The package is abandoned, the published security contact is a dead mailbox, and no patched version exists — so this is a CERT/CC-coordinated public disclosure under VU#987362."
+date: 2026-10-04
+severity: High
+cvss: 8.1
+cwe: "CWE-22"
+product: "decompress-zip"
+version: "≤ 0.3.3 (no fix available)"
+vendor: "bower/decompress-zip"
+status: "Coordinated"
+ecosystem: "npm"
+cvssVector: "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:H/A:H"
+tags: ["zip-slip", "path-traversal", "arbitrary-file-write", "javascript", "npm", "supply-chain", "abandoned-package", "cert-cc", "coordinated-disclosure", "cwe-22"]
+advisory: "https://kb.cert.org/vuls/id/987362"
+order: 5
+featured: true
+type: "Disclosure"
+readingTime: 8
+---
+
+[`decompress-zip`](https://www.npmjs.com/package/decompress-zip) is an npm ZIP-extraction
+library from the Bower ecosystem (`github.com/bower/decompress-zip`). It was patched for classic
+Zip Slip (`../../etc/...`) in `0.3.2`, and that fix is genuinely effective — the textbook
+traversal payload is blocked. The problem is the *shape* of the fix: a string-prefix check. A
+string prefix is not a directory boundary, and an archive entry can escape into a **sibling
+directory that shares the destination's prefix** while sailing straight through the guard.
+
+This is the same class of bug as the [unzipper sibling-prefix
+bypass](/writeups/unzipper-zip-slip-sibling-prefix-bypass) — a Zip Slip mitigation that stops
+`../../` but never actually enforces containment. The difference here is the ending.
+decompress-zip is **abandoned**: the only published security contact bounces, private reporting
+is disabled on the repository, there is no `SECURITY.md`, and **no patched version exists or is
+coming.** This writeup is the public post coordinated through CERT/CC under **VU#987362** — the
+condition for the CVE to be published.
+
+> **No fix is available.** If your software passes untrusted ZIP archives to `decompress-zip`,
+> treat the dependency itself as the finding and jump to [What to do instead](#what-to-do-instead).
+
+## The guard, and the hole in it
+
+From `lib/decompress-zip.js`, the containment check:
+
+```js
+// lib/decompress-zip.js — vulnerable
+var destination = path.join(options.path, file.path);
+
+if (destination.indexOf(options.path) !== 0) {
+  throw new Error('... outside ... the target path');
+}
+```
+
+The intent is "reject any entry that resolves outside the destination." The implementation asks
+a weaker question — "does the resolved path *string* start with the destination *string*?" —
+and those are not the same:
+
+```text
+Destination:  /uploads/userdir
+Entry path:   ../userdir-EVIL/pwn.txt
+Resolved to:  /uploads/userdir-EVIL/pwn.txt
+```
+
+`"/uploads/userdir-EVIL/pwn.txt".indexOf("/uploads/userdir")` is `0` — the sibling path **does**
+begin with the destination string, because `userdir-EVIL` shares the `userdir` prefix. The
+check passes, and the file is written to `/uploads/userdir-EVIL/pwn.txt`, outside the intended
+root. Classic `../../x` still resolves clear of the prefix and is still rejected — which is
+exactly why the bug stayed hidden: the one payload everyone tests with is blocked.
+
+### The tell: the library already knows the right way
+
+What makes this a clean finding rather than a judgement call is that **decompress-zip already
+uses the correct, boundary-aware check elsewhere.** Its symlink handling guards containment with
+`path.relative()`. So the library contains both the broken pattern (for file entries) and the
+correct pattern (for symlinks), side by side. The fix is not a new technique — it is applying
+the technique the codebase already trusts.
+
+## Proof of concept
+
+```js
+const DecompressZip = require('decompress-zip');
+
+// evil.zip contains a single entry whose path is:  ../userdir-EVIL/pwn.txt
+new DecompressZip('evil.zip').extract({ path: 'dest/userdir' });
+
+// Result: dest/userdir-EVIL/pwn.txt is written — outside dest/userdir.
+```
+
+Confirmed behaviour:
+
+| Entry path                | Outcome                                             |
+| ------------------------- | --------------------------------------------------- |
+| `../userdir-EVIL/pwn.txt` | **Bypasses** the guard — written to a sibling dir ❌ |
+| `../../x`                 | Correctly blocked by the 0.3.2 fix ✅               |
+
+No authentication is required. The attacker only needs the application to hand a supplied ZIP to
+`decompress-zip` for extraction — the normal path for any upload or download feature built on
+the library. Worse, the escape is **silent**: the library returns successfully with no error, so
+the calling application has no signal that a file landed outside the sandbox.
+
+## Why the severity is real
+
+CVSS 3.1 **8.1 (High)**, vector `AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:H/A:H` — network-reachable input,
+low complexity, no privileges; it needs the victim to extract an attacker-supplied archive
+(`UI:R`), and the payoff is high integrity and availability impact, i.e. arbitrary file *write*
+outside the root. [CWE-22](https://cwe.mitre.org/data/definitions/22.html). A write primitive is
+rarely the end of the story:
+
+- overwrite adjacent configuration, build artifacts, or data in prefix-sibling directories
+  (`userdir.bak`, `userdir.config`, `userdir-EVIL`, …),
+- clobber a critical file and take the application down (the availability angle),
+- escalate toward code execution where a writable sibling path holds something later executed or
+  served.
+
+The escape is constrained to siblings that share the destination's prefix, not the whole
+filesystem — but on an unmaintained library that still ships as the latest version, "constrained
+arbitrary write with no patch" is a standing supply-chain exposure for every dependent.
+
+## Discovery and coordination
+
+I found this during manual source review of `decompress-zip` 0.3.3 in June 2026 — authorized
+open-source security research. The guard in `lib/decompress-zip.js` used an `indexOf` string
+prefix where the symlink path used `path.relative()`; that inconsistency is the thread you pull.
+I confirmed the bypass by building a ZIP with a prefix-sibling entry and watching the file land
+outside the destination while the library returned clean.
+
+Then I tried to report it, and ran into the other half of the story.
+
+- **2026-06-03** — I emailed the only published security contact for the Bower project,
+  `team@bower.io` (listed in the `bower/bower` GitHub security policy). It bounced immediately
+  and permanently:
+
+  ```text
+  554 5.7.1: Client host rejected: Address locked or deactivated
+  ```
+
+  The mailbox is dead. The `bower/decompress-zip` repository has had no maintainer activity for
+  years, private vulnerability reporting is not enabled, and there is no `SECURITY.md` or any
+  other disclosed channel.
+
+- **2026-06-08** — With every vendor channel exhausted by project abandonment, I reported to
+  **CERT/CC** for coordination and CVE assignment. The case is **VU#987362**.
+
+- CERT/CC attempted to reach the parties who had taken over support; they did not respond.
+  Since a CVE cannot be published without an accompanying public reference, CERT/CC and I
+  coordinated **this post** as that reference, after which the CVE record is published.
+
+This is what coordinated disclosure looks like when the vendor no longer exists: good-faith
+contact first, a neutral coordinator second, and public disclosure with mitigation guidance when
+the software cannot be fixed at the source.
+
+## The fix (that the project will not ship)
+
+For completeness — and for anyone forking or vendoring the code — the correction is a
+one-for-one swap to the boundary-aware check the library already uses for symlinks:
+
+```js
+// lib/decompress-zip.js — corrected
+const destination = path.join(options.path, file.path);
+const rel = path.relative(options.path, destination);
+
+if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) {
+  throw new Error('outside target path');
+}
+```
+
+`path.relative(dest, target)` is the path *from* the destination *to* the target; if the target
+is genuinely inside, that relative path never starts with `..` and is never absolute.
+`path.relative('/uploads/userdir', '/uploads/userdir-EVIL/pwn.txt')` is `../userdir-EVIL/pwn.txt`
+— it starts with `..`, so the sibling-prefix case is rejected. `path.isAbsolute(rel)` covers
+entries that resolve onto a different root; `rel === ''` covers the destination itself.
+
+Because the package is abandoned, do not expect this upstream. The fix matters for your own
+copy, not for a release that is coming.
+
+## What to do instead
+
+Since there is no patched version, the dependency is the finding. In rough order of preference:
+
+1. **Replace the library.** Move extraction to a maintained package that enforces boundary-aware
+   containment (for example `yauzl` with explicit entry-path validation, or another actively
+   maintained unzip library), and audit the call site while you are there.
+2. **Validate entry paths before extraction.** If you cannot swap immediately, resolve each
+   entry against the destination and reject anything where
+   `path.relative(dest, resolved)` starts with `..` or is absolute — *before* writing. Do not
+   rely on the library's internal guard.
+3. **Extract to an isolated, disposable directory** with no sensitive prefix-siblings, then move
+   only the expected files out by an allow-list. A destination like `/data/unzip/<random>` has no
+   meaningful sibling to escape into.
+4. **Pin and flag the dependency** in your SCA tooling so the abandoned package is tracked and
+   does not silently propagate into new services.
+
+## Timeline
+
+| Date         | Event                                                                                     |
+| ------------ | ----------------------------------------------------------------------------------------- |
+| 2026-06      | Found during manual review of `decompress-zip` 0.3.3; prefix-sibling PoC confirmed.        |
+| 2026-06-03   | Vendor contact attempted (`team@bower.io`) — permanent bounce; project confirmed abandoned. |
+| 2026-06-08   | Reported to CERT/CC for coordination; case **VU#987362** opened.                           |
+| 2026-07/08   | CERT/CC attempts to engage current maintainers/successor; no response.                     |
+| 2026-10      | Public post coordinated with CERT/CC; CVE record published against it.                     |
+
+## Takeaways
+
+- **A string prefix is not a path boundary.** `destination.indexOf(root) === 0` treats
+  `/uploads/userdir-EVIL` as living under `/uploads/userdir`. Use `path.relative` (or compare
+  against `root + path.sep`) so the sibling-prefix case cannot slip through.
+- **Inconsistency inside one file is a lead.** decompress-zip guarded symlinks with
+  `path.relative` and file entries with `indexOf`. When a codebase uses the safe pattern in one
+  place and the unsafe one in another for the same property, the unsafe one is usually the bug.
+- **Abandoned dependencies are unpatchable attack surface.** A library that is "done" is not
+  safe by virtue of being stable — it is frozen with its flaws and no one to fix them. Treat an
+  unmaintained extraction library handling untrusted input as a standing risk.
+- **Disclosure still works when the vendor is gone.** Dead mailbox, dead repo, no `SECURITY.md`
+  — CERT/CC exists precisely for this. Document the failed contact, hand it to a coordinator, and
+  publish with mitigations so defenders can act even though the source never will.

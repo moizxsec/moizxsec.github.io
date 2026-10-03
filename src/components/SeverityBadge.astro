@@ -1,27 +1,26 @@
 ---
+import type { Severity } from '../lib/writeups';
+
 interface Props {
-  severity: 'Critical' | 'High' | 'Medium' | 'Low' | 'Informational';
+  severity: Severity;
+  /** When given, the score is rendered beside the label: "HIGH 8.7". */
+  cvss?: number;
   size?: 'sm' | 'md';
 }
 
-const { severity, size = 'sm' } = Astro.props;
-
-const colors: Record<string, string> = {
-  Critical: 'border-red-900 bg-red-950/40 text-red-300',
-  High: 'border-orange-900 bg-orange-950/40 text-orange-300',
-  Medium: 'border-yellow-900 bg-yellow-950/40 text-yellow-300',
-  Low: 'border-blue-900 bg-blue-950/40 text-blue-300',
-  Informational: 'border-zinc-700 bg-zinc-900/60 text-zinc-400',
-};
-
+const { severity, cvss, size = 'sm' } = Astro.props;
 const sizes = {
-  sm: 'text-[0.65rem] px-1.5 py-0.5',
-  md: 'text-xs px-2 py-1',
+  sm: 'text-2xs px-1.5 py-0.5 gap-1.5',
+  md: 'text-xs px-2 py-1 gap-2',
 };
 ---
 
 <span
-  class={`inline-flex items-center font-mono font-semibold uppercase tracking-wider border rounded ${colors[severity]} ${sizes[size]}`}
+  class={`sev inline-flex items-center font-mono font-medium uppercase tracking-wider border rounded whitespace-nowrap ${sizes[size]}`}
+  data-sev={severity}
+  title={cvss ? `${severity} · CVSS ${cvss.toFixed(1)}` : severity}
 >
-  {severity}
+  <i class="sev-dot inline-block w-1.5 h-1.5 rounded-full" aria-hidden="true"></i>
+  <span>{severity}</span>
+  {cvss !== undefined && <span class="font-semibold tabular-nums">{cvss.toFixed(1)}</span>}
 </span>

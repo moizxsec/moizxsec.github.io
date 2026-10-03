@@ -1,197 +1,205 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
+import AdvisoryTable from '../components/AdvisoryTable.astro';
+import SectionHeading from '../components/SectionHeading.astro';
 import WriteupCard from '../components/WriteupCard.astro';
-import { getCollection } from 'astro:content';
+import Portrait from '../components/Portrait.astro';
+import {
+  SITE,
+  TYPE_BLURB,
+  TYPE_ORDER,
+  byOrder,
+  getAdvisories,
+  getPublished,
+  isAdvisory,
+  stats,
+} from '../lib/writeups';
 
-const writeups = (await getCollection('writeups', ({ data }) => !data.draft)).sort(
-  (a, b) => (a.data.order ?? 100) - (b.data.order ?? 100),
+const all = await getPublished();
+const advisories = await getAdvisories();
+const s = stats(all);
+
+// Everything that is not already on the advisory board, grouped by type.
+const rest = all.filter((w) => !isAdvisory(w)).sort(byOrder);
+const groups = TYPE_ORDER.map((t) => ({ type: t, items: rest.filter((w) => w.data.type === t) })).filter(
+  (g) => g.items.length > 0,
 );
-const critCount = writeups.filter((w) => w.data.severity === 'Critical').length;
-const highCount = writeups.filter((w) => w.data.severity === 'High').length;
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'Person',
+  name: SITE.name,
+  alternateName: SITE.handle,
+  jobTitle: 'Application Security Engineer',
+  url: Astro.site?.toString(),
+  email: `mailto:${SITE.email}`,
+  sameAs: [SITE.github, SITE.linkedin],
+  knowsAbout: [
+    'Vulnerability research',
+    'Application security',
+    'Penetration testing',
+    'Active Directory security',
+    'OAuth and SAML',
+    'AWS WAF',
+    'LLM security',
+  ],
+};
+
+const focus = [
+  ['Web · API', 'OWASP, NIST 800-115, PTES, OSSTMM'],
+  ['Identity', 'Active Directory, Entra ID, SAML, OAuth 2.0, OIDC, JWT'],
+  ['Cloud', 'AWS WAF, Azure, Firebase, Power Platform misconfiguration'],
+  ['AI / agents', 'Prompt-injection defence, dual-LLM cascades, automated CVE triage'],
+];
 ---
 
-<BaseLayout title="moizxsec — Abdul Moiz">
-  <div class="max-w-6xl mx-auto px-4 sm:px-6 pt-12 sm:pt-16 pb-16">
-    <div class="grid grid-cols-1 lg:grid-cols-[200px_1fr_240px] gap-8 lg:gap-10">
-      <!-- LEFT RAIL — identity -->
-      <aside class="lg:sticky lg:top-24 lg:self-start space-y-4 order-2 lg:order-1 max-w-sm w-full mx-auto lg:max-w-none lg:mx-0">
-        <div class="border border-zinc-900 rounded-md overflow-hidden">
-          <img src="/images/profile.jpg" alt="Abdul Moiz" width="600" height="600" class="block w-full aspect-square object-cover border-b border-zinc-900" loading="eager" decoding="async" />
-          <div class="p-4">
-            <div class="text-sm text-zinc-50 font-semibold mb-0.5">Abdul Moiz</div>
-            <div class="text-xs font-mono text-zinc-500 mb-3">moizxsec</div>
-            <div class="text-xs text-zinc-400 leading-relaxed mb-3">
-              Offensive security engineer
-            </div>
-            <div class="text-[0.65rem] font-mono uppercase tracking-widest text-zinc-600">
-              Lahore, PK
-            </div>
+<BaseLayout title={`${SITE.name} — vulnerability research & offensive security`} jsonLd={jsonLd}>
+  <!-- HERO -->
+  <section class="relative overflow-hidden border-b border-line">
+    <div class="hero-aurora" aria-hidden="true"></div>
+    <div class="absolute inset-0 grid-bg pointer-events-none" aria-hidden="true"></div>
+    <div class="relative max-w-site mx-auto px-4 sm:px-6 pt-14 sm:pt-20 pb-12 sm:pb-16">
+      <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_auto] gap-10 lg:gap-16 items-start">
+        <div class="min-w-0">
+          <p class="label text-accent mb-5 rise" style="--d:0">// vulnerability research · appsec · offensive engineering</p>
+          <h1 class="rise text-4xl sm:text-5xl lg:text-6xl font-semibold text-fg tracking-[-0.03em] leading-[1.02] mb-6" style="--d:1">
+            {SITE.name}
+          </h1>
+          <p class="rise text-lg sm:text-xl text-muted leading-relaxed max-w-2xl mb-4" style="--d:2">
+            Offensive security engineer. I find ways to break web applications, identity providers,
+            cloud platforms, and the chains that hold them together — then I help fix them.
+          </p>
+          <p class="rise text-base text-faint leading-relaxed max-w-2xl mb-8" style="--d:3">
+            Currently shipping AI-assisted application security at a HIPAA / SOC&nbsp;2 healthcare
+            platform. On the side, I disclose vulnerabilities in open-source software under
+            coordinated disclosure.
+          </p>
+          <div class="rise flex flex-wrap gap-3" style="--d:4">
+            <a href="/advisories/" class="btn-primary">View advisories <span aria-hidden="true">→</span></a>
+            <a href="/writeups/" class="btn-ghost">Read writeups</a>
+            <a href={SITE.github} target="_blank" rel="noopener" class="btn-ghost">GitHub <span aria-hidden="true">↗</span></a>
           </div>
         </div>
 
-        <div class="border border-zinc-900 rounded-md p-4">
-          <div class="text-[0.65rem] font-mono uppercase tracking-widest text-zinc-600 mb-3">
-            Links
-          </div>
-          <ul class="text-xs space-y-2">
-            <li>
-              <a
-                href="/writeups"
-                class="text-zinc-300 hover:text-zinc-50 transition-colors"
-                >→ Writeups</a
-              >
-            </li>
-            <li>
-              <a
-                href="/about"
-                class="text-zinc-300 hover:text-zinc-50 transition-colors"
-                >→ About</a
-              >
-            </li>
-            <li>
-              <a
-                href="https://github.com/moizxsec"
-                target="_blank"
-                rel="noopener"
-                class="text-zinc-300 hover:text-zinc-50 transition-colors"
-                >→ GitHub</a
-              >
-            </li>
-            <li>
-              <a
-                href="https://www.linkedin.com/in/muezism101"
-                target="_blank"
-                rel="noopener"
-                class="text-zinc-300 hover:text-zinc-50 transition-colors"
-                >→ LinkedIn</a
-              >
-            </li>
-            <li>
-              <a
-                href="/rss.xml"
-                class="text-zinc-300 hover:text-zinc-50 transition-colors"
-                >→ RSS</a
-              >
-            </li>
-            <li>
-              <a
-                href="mailto:muezzism@gmail.com"
-                class="text-zinc-300 hover:text-zinc-50 transition-colors break-all"
-                >→ Email</a
-              >
-            </li>
+        <aside class="rise flex lg:flex-col items-center lg:items-stretch gap-4 lg:w-52" aria-label="Identity" style="--d:2">
+          <Portrait
+            class="w-24 h-24 sm:w-28 sm:h-28 lg:w-52 lg:h-52 rounded-md border border-line-strong shrink-0"
+            loading="eager"
+          />
+          <dl class="font-mono text-xs space-y-1.5 min-w-0">
+            <div class="flex gap-3"><dt class="text-faint w-14 shrink-0">handle</dt><dd class="text-fg truncate">{SITE.handle}</dd></div>
+            <div class="flex gap-3"><dt class="text-faint w-14 shrink-0">role</dt><dd class="text-fg">AppSec engineer</dd></div>
+            <div class="flex gap-3"><dt class="text-faint w-14 shrink-0">base</dt><dd class="text-fg">{SITE.location}</dd></div>
+            <div class="flex gap-3"><dt class="text-faint w-14 shrink-0">contact</dt><dd class="min-w-0"><a href={`mailto:${SITE.email}`} class="text-fg hover:text-accent transition-colors truncate block">email</a></dd></div>
+          </dl>
+        </aside>
+      </div>
+
+      <!-- Numbers are computed from the content collection; nothing here is typed by hand. -->
+      <dl class="reveal mt-12 sm:mt-16 grid grid-cols-2 sm:grid-cols-4 gap-px bg-line border border-line rounded-md overflow-hidden">
+        <div class="bg-bg p-4">
+          <dt class="label mb-1">Advisories</dt>
+          <dd class="font-mono text-2xl text-fg tabular-nums">{s.advisories}</dd>
+        </div>
+        <div class="bg-bg p-4">
+          <dt class="label mb-1">{s.cves > 0 ? 'CVE IDs' : 'Patched'}</dt>
+          <dd class="font-mono text-2xl text-fg tabular-nums">{s.cves > 0 ? s.cves : s.patched}</dd>
+        </div>
+        <div class="bg-bg p-4">
+          <dt class="label mb-1">Writeups</dt>
+          <dd class="font-mono text-2xl text-fg tabular-nums">{s.writeups}</dd>
+        </div>
+        <div class="bg-bg p-4">
+          <dt class="label mb-1">Critical / High</dt>
+          <dd class="font-mono text-2xl text-fg tabular-nums">{s.critical} <span class="text-faint">/</span> {s.high}</dd>
+        </div>
+      </dl>
+    </div>
+  </section>
+
+  <div class="max-w-site mx-auto px-4 sm:px-6">
+    <!-- ADVISORIES -->
+    <section class="pt-14 sm:pt-20" aria-labelledby="advisories">
+      <SectionHeading index="01" title="CVEs & advisories" id="advisories" href="/advisories/" count={advisories.length} />
+      <p class="text-sm text-muted leading-relaxed max-w-2xl mb-6">
+        Vulnerabilities I found and reported to maintainers. Each row is a full writeup: root cause,
+        proof of concept, fix, and the disclosure timeline.
+      </p>
+      <AdvisoryTable advisories={advisories} limit={8} />
+    </section>
+
+    <!-- WRITEUPS BY TYPE -->
+    <section class="pt-16 sm:pt-20" aria-labelledby="writeups">
+      <SectionHeading index="02" title="Research & writeups" id="writeups" href="/writeups/" count={rest.length} />
+      <div class="grid grid-cols-1 lg:grid-cols-[14rem_minmax(0,1fr)] gap-8 lg:gap-12">
+        <nav class="lg:sticky lg:top-20 lg:self-start" aria-label="Writeup types">
+          <ul class="flex lg:flex-col flex-wrap gap-2 lg:gap-1">
+            {
+              groups.map((g) => (
+                <li>
+                  <a
+                    href={`#type-${g.type.toLowerCase().replace(/\s+/g, '-')}`}
+                    class="flex items-center justify-between gap-3 font-mono text-xs text-muted hover:text-fg transition-colors border border-line lg:border-0 rounded px-2 py-1 lg:px-0"
+                  >
+                    <span>{g.type}</span>
+                    <span class="text-faint tabular-nums">{g.items.length}</span>
+                  </a>
+                </li>
+              ))
+            }
           </ul>
-        </div>
+        </nav>
 
-        <div class="border border-zinc-900 rounded-md p-4">
-          <div class="text-[0.65rem] font-mono uppercase tracking-widest text-zinc-600 mb-3">
-            Disclosed
-          </div>
-          <ul class="text-xs space-y-2.5 font-mono">
-            <li>
-              <div class="text-zinc-300">FileGator</div>
-              <div class="text-zinc-600 text-[0.7rem]">v7.14.2 changelog</div>
-            </li>
-            <li>
-              <div class="text-zinc-300">starlette</div>
-              <div class="text-zinc-600 text-[0.7rem]">GHSA-cm5j-qvph-7x6w</div>
-            </li>
-          </ul>
+        <div class="min-w-0 space-y-12">
+          {
+            groups.map((g) => (
+              <div id={`type-${g.type.toLowerCase().replace(/\s+/g, '-')}`} class="scroll-mt-20">
+                <div class="flex items-baseline justify-between gap-4 mb-1">
+                  <h3 class="font-mono text-sm text-fg">{g.type}</h3>
+                  <a
+                    href={`/writeups/?type=${encodeURIComponent(g.type)}`}
+                    class="arrow-link font-mono text-xs text-faint hover:text-fg transition-colors shrink-0"
+                  >
+                    all {g.items.length} <span aria-hidden="true">→</span>
+                  </a>
+                </div>
+                <p class="text-xs text-faint mb-2">{TYPE_BLURB[g.type]}</p>
+                <ul class="border-t border-line">
+                  {g.items.slice(0, 3).map((w) => (
+                    <WriteupCard entry={w} compact />
+                  ))}
+                </ul>
+              </div>
+            ))
+          }
         </div>
-      </aside>
+      </div>
+    </section>
 
-      <!-- MIDDLE — bio + writeups -->
-      <section class="min-w-0 order-1 lg:order-2">
-        <h1 class="text-2xl sm:text-3xl lg:text-4xl font-semibold text-zinc-50 tracking-tight leading-tight mb-4">
-          Abdul Moiz
-        </h1>
-        <p class="text-zinc-400 text-base leading-relaxed mb-12 max-w-2xl">
-          Offensive security engineer. I find ways to break web applications, identity
-          providers, cloud platforms, and the chains that hold them together — then I help
-          fix them. Currently shipping AI-assisted application security at a HIPAA /
-          SOC&nbsp;2 healthcare platform; on the side, I disclose vulnerabilities in
-          open-source software.
-        </p>
-
-        <div class="flex items-baseline justify-between mb-2 border-b border-zinc-900 pb-3">
-          <h2 class="text-xs font-mono text-zinc-500 uppercase tracking-widest">
-            Latest Writeups
-          </h2>
-          <a
-            href="/writeups"
-            class="text-xs font-mono text-zinc-500 hover:text-zinc-200 transition-colors"
-            >view all →</a
-          >
-        </div>
+    <!-- FOCUS + CONTACT -->
+    <section class="pt-16 sm:pt-20" aria-labelledby="focus">
+      <SectionHeading index="03" title="Focus" id="focus" href="/about/" linkLabel="about" />
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-px bg-line border border-line rounded-md overflow-hidden">
         {
-          writeups.slice(0, 6).map((w) => (
-            <WriteupCard
-              slug={w.slug}
-              title={w.data.title}
-              summary={w.data.summary}
-              date={w.data.date}
-              severity={w.data.severity}
-              cvss={w.data.cvss}
-              product={w.data.product}
-              tags={w.data.tags}
-              type={w.data.type}
-              readingTime={w.data.readingTime}
-              featured={w.data.featured}
-            />
+          focus.map(([k, v]) => (
+            <div class="reveal bg-bg p-5">
+              <div class="font-mono text-xs text-fg mb-1">{k}</div>
+              <div class="text-sm text-muted leading-relaxed">{v}</div>
+            </div>
           ))
         }
-      </section>
+      </div>
 
-      <!-- RIGHT RAIL — currently + focus + stats -->
-      <aside class="lg:sticky lg:top-24 lg:self-start space-y-4 order-3 max-w-sm w-full mx-auto lg:max-w-none lg:mx-0">
-        <div class="border border-zinc-900 rounded-md p-4">
-          <div class="text-[0.65rem] font-mono uppercase tracking-widest text-zinc-600 mb-3">
-            Currently
-          </div>
-          <div class="text-sm text-zinc-200 leading-relaxed mb-1">
-            Application Security Engineer
-          </div>
-          <div class="text-xs text-zinc-500 leading-relaxed">
-            HIPAA / SOC&nbsp;2 healthcare SaaS
-          </div>
+      <div class="reveal mt-10 panel p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <div class="font-mono text-sm text-fg mb-1">Coordinated disclosure</div>
+          <p class="text-sm text-muted leading-relaxed max-w-xl">
+            90-day window from vendor acknowledgement. If you maintain something I've written
+            about and want to talk, email is the most reliable channel.
+          </p>
         </div>
-
-        <div class="border border-zinc-900 rounded-md p-4">
-          <div class="text-[0.65rem] font-mono uppercase tracking-widest text-zinc-600 mb-3">
-            Focus
-          </div>
-          <ul class="text-xs text-zinc-300 leading-relaxed space-y-1.5">
-            <li>Web · API · Active Directory</li>
-            <li>Cloud identity · SAML · OAuth</li>
-            <li>AWS WAF · Entra ID · Firebase</li>
-            <li>LLM security · multi-agent CI</li>
-          </ul>
-        </div>
-
-        <div class="border border-zinc-900 rounded-md p-4">
-          <div class="text-[0.65rem] font-mono uppercase tracking-widest text-zinc-600 mb-3">
-            Stats
-          </div>
-          <dl class="text-xs font-mono space-y-2">
-            <div class="flex justify-between">
-              <dt class="text-zinc-500">Writeups</dt>
-              <dd class="text-zinc-200">{writeups.length}</dd>
-            </div>
-            <div class="flex justify-between">
-              <dt class="text-zinc-500">Critical</dt>
-              <dd class="text-zinc-200">{critCount}</dd>
-            </div>
-            <div class="flex justify-between">
-              <dt class="text-zinc-500">High</dt>
-              <dd class="text-zinc-200">{highCount}</dd>
-            </div>
-            <div class="flex justify-between">
-              <dt class="text-zinc-500">Credits</dt>
-              <dd class="text-zinc-200">2</dd>
-            </div>
-          </dl>
-        </div>
-      </aside>
-    </div>
+        <a href={`mailto:${SITE.email}`} class="btn-ghost shrink-0">{SITE.email}</a>
+      </div>
+    </section>
   </div>
 </BaseLayout>

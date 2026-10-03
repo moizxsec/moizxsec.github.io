@@ -1,38 +1,30 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
+import { SITE } from '../lib/writeups';
 ---
 
-<BaseLayout title="404 — moizxsec" description="Page not found.">
-  <div class="max-w-6xl mx-auto px-6 py-24">
-    <div class="font-mono text-sm text-zinc-500 mb-2">$ curl -sI {Astro.url.pathname}</div>
-    <div class="font-mono text-sm text-zinc-700 mb-8">HTTP/2 404 Not Found</div>
+<BaseLayout title={`404 — ${SITE.handle}`} description="Page not found.">
+  <div class="max-w-site mx-auto px-4 sm:px-6 py-24">
+    <pre class="font-mono text-xs sm:text-sm text-faint mb-10 overflow-x-auto"><span class="text-muted">$</span> curl -sI <span id="nf-path" class="text-fg">{Astro.url.pathname}</span>
+HTTP/2 <span class="text-accent">404</span> Not Found
+content-type: text/html; charset=utf-8</pre>
 
-    <h1 class="text-3xl font-semibold text-zinc-50 tracking-tight mb-4">
-      That page doesn't exist.
-    </h1>
-    <p class="text-zinc-400 leading-relaxed max-w-xl mb-8">
-      The link is wrong, the page moved, or the slug was made up. None of those are
-      interesting bugs.
+    <h1 class="text-3xl sm:text-4xl font-semibold text-fg tracking-tight mb-4">That page doesn't exist.</h1>
+    <p class="text-muted leading-relaxed max-w-xl mb-8">
+      The link is wrong, the page moved, or the slug was made up. None of those are interesting bugs.
     </p>
 
-    <div class="flex gap-4 text-sm font-mono">
-      <a
-        href="/"
-        class="text-zinc-200 underline decoration-zinc-700 underline-offset-2 hover:decoration-orange-500"
-        >home</a
-      >
-      <span class="text-zinc-800">·</span>
-      <a
-        href="/writeups"
-        class="text-zinc-200 underline decoration-zinc-700 underline-offset-2 hover:decoration-orange-500"
-        >writeups</a
-      >
-      <span class="text-zinc-800">·</span>
-      <a
-        href="mailto:muezzism@gmail.com"
-        class="text-zinc-200 underline decoration-zinc-700 underline-offset-2 hover:decoration-orange-500"
-        >email</a
-      >
+    <div class="flex flex-wrap gap-3">
+      <a href="/" class="btn-primary">home</a>
+      <a href="/advisories/" class="btn-ghost">advisories</a>
+      <a href="/writeups/" class="btn-ghost">writeups</a>
+      <a href={`mailto:${SITE.email}`} class="btn-ghost">email</a>
     </div>
   </div>
+
+  <script>
+    // Static 404s are served for every missing path; show the one that was actually requested.
+    const el = document.getElementById('nf-path');
+    if (el) el.textContent = location.pathname;
+  </script>
 </BaseLayout>

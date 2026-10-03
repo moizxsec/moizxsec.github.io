@@ -1,9 +1,9 @@
 ---
-import { getCollection } from 'astro:content';
 import WriteupLayout from '../../layouts/WriteupLayout.astro';
+import { getPublished } from '../../lib/writeups';
 
 export async function getStaticPaths() {
-  const writeups = await getCollection('writeups', ({ data }) => !data.draft);
+  const writeups = await getPublished();
   return writeups.map((w) => ({
     params: { slug: w.slug },
     props: { entry: w },
@@ -11,27 +11,9 @@ export async function getStaticPaths() {
 }
 
 const { entry } = Astro.props;
-const { Content } = await entry.render();
+const { Content, headings } = await entry.render();
 ---
 
-<WriteupLayout
-  title={entry.data.title}
-  summary={entry.data.summary}
-  date={entry.data.date}
-  severity={entry.data.severity}
-  cvss={entry.data.cvss}
-  cve={entry.data.cve}
-  ghsa={entry.data.ghsa}
-  cwe={entry.data.cwe}
-  product={entry.data.product}
-  version={entry.data.version}
-  vendor={entry.data.vendor}
-  status={entry.data.status}
-  tags={entry.data.tags}
-  advisory={entry.data.advisory}
-  type={entry.data.type}
-  readingTime={entry.data.readingTime}
-  featured={entry.data.featured}
->
+<WriteupLayout entry={entry} headings={headings}>
   <Content />
 </WriteupLayout>
