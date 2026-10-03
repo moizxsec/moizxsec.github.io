@@ -9,7 +9,7 @@ const tags = tagCounts(writeups).slice(0, 18);
 ---
 
 <BaseLayout
-  title={`Writeups — ${SITE.handle}`}
+  title={`Writeups | ${SITE.handle}`}
   description={`Vulnerability disclosures, offensive security research, and class-of-vuln deep dives by ${SITE.name}.`}
 >
   <div class="max-w-site mx-auto px-4 sm:px-6 pt-12 sm:pt-16 pb-12">
@@ -91,7 +91,7 @@ const tags = tagCounts(writeups).slice(0, 18);
           <div class="label mb-2">Disclosure policy</div>
           <p class="text-xs text-muted leading-relaxed">
             90-day coordinated window from vendor acknowledgement. Confidential engagements never
-            reveal client identifiers — the technical class is what travels.
+            reveal client identifiers; the technical class is what travels.
           </p>
           <a href="/about/#disclosure-policy" class="inline-block mt-3 font-mono text-xs link-quiet">full policy →</a>
         </div>
@@ -129,7 +129,7 @@ const tags = tagCounts(writeups).slice(0, 18);
         if (countEl) countEl.textContent = String(shown);
         if (labelEl) {
           const parts = [state.type, state.tag && `#${state.tag}`].filter(Boolean);
-          labelEl.textContent = parts.length ? ` — ${parts.join(' · ')}` : '';
+          labelEl.textContent = parts.length ? `(${parts.join(' · ')})` : '';
         }
         clearBtn?.classList.toggle('hidden', !state.type && !state.tag);
         emptyEl?.classList.toggle('hidden', shown > 0);

@@ -1,5 +1,5 @@
 ---
-title: "Starlette — Form-Parser Limits Silently Ignored for URL-Encoded Bodies"
+title: "Starlette: Form-Parser Limits Silently Ignored for URL-Encoded Bodies"
 summary: "Starlette's Request.form() advertises max_fields, max_files, and max_part_size as resource-consumption guards. They are correctly enforced for multipart/form-data but quietly dropped on the application/x-www-form-urlencoded path, so any FastAPI or Starlette app that calls request.form() and accepts URL-encoded bodies is exposed to a one-request event-loop-blocking DoS."
 date: 2026-06-15
 severity: High
@@ -24,7 +24,7 @@ readingTime: 5
 
 [Starlette](https://github.com/encode/starlette) is the ASGI framework that
 [FastAPI](https://github.com/tiangolo/fastapi) is built on. Anywhere a FastAPI route calls
-`await request.form()` — even indirectly, via a dependency or a third-party library — it
+`await request.form()` (even indirectly, via a dependency or a third-party library), it
 hands the request body to a Starlette form parser. Starlette exposes three knobs to keep that
 parser bounded:
 
@@ -40,12 +40,12 @@ async with request.form(
 These limits are real and behave correctly for `multipart/form-data`. They are silently
 ignored for `application/x-www-form-urlencoded`. An attacker can send a URL-encoded body of
 arbitrary size containing hundreds of thousands of fields, and the parser will accept all of
-it — blocking the async event loop on every concurrent request.
+it, blocking the async event loop on every concurrent request.
 
 The advisory is
 [GHSA-82w8-qh3p-5jfq](https://github.com/advisories/GHSA-82w8-qh3p-5jfq) / **CVE-2026-54283**,
 CVSS 7.5, fixed by the maintainer (Marcelo Trylesinski) in `starlette@1.3.1`. The issue was
-reported independently by several researchers — I am one of the credited reporters on the
+reported independently by several researchers; I am one of the credited reporters on the
 advisory. Affected range: `>= 0.4.1, < 1.3.1`.
 
 ## The gap
@@ -70,7 +70,7 @@ elif content_type == b"application/x-www-form-urlencoded":
     self._form = await form_parser.parse()
 ```
 
-`MultiPartParser` accepts all three guards. `FormParser` accepts none of them — its
+`MultiPartParser` accepts all three guards. `FormParser` accepts none of them: its
 `__init__` signature is `(headers, stream)`. Even if `Request._get_form()` were updated to
 pass the kwargs, the receiver would silently drop them. The bug is in the contract between
 the two classes, not in any single arithmetic expression.
@@ -98,7 +98,7 @@ async def form_endpoint(request: Request):
 app = Starlette(routes=[Route("/form", form_endpoint, methods=["POST"])])
 ```
 
-### Multipart — the limits work
+### Multipart: the limits work
 
 ```
 POST /form HTTP/1.1
@@ -109,7 +109,7 @@ Content-Type: multipart/form-data; boundary=---bd
 
 → **HTTP 400 Bad Request**. As expected: `max_fields=10` is exceeded and the parser raises.
 
-### URL-encoded — the limits do not work
+### URL-encoded: the limits do not work
 
 ```
 POST /form HTTP/1.1
@@ -124,7 +124,7 @@ a=1&a=2&...&a=500000
 
 At roughly a million fields, the parser's serial work inside `QuerystringParser` blocks the
 async event loop for around **8.4 seconds per request**, during which the worker cannot
-process any other request — health checks, in-flight users, anything. The cost to the
+process any other request: health checks, in-flight users, anything. The cost to the
 attacker is one HTTP request at a few megabytes; the cost to the server is wall-clock latency
 for everything sharing that worker.
 
@@ -139,7 +139,7 @@ trusting it, swapping the request `Content-Type` between `multipart/form-data` a
 `application/x-www-form-urlencoded` while keeping the same payload shape. Multipart was
 rejected the way the docs promised. URL-encoded sailed through.
 
-That mismatch — same parser, same guard, opposite outcome — is what surfaces the bug. From
+That mismatch (same parser, same guard, opposite outcome) is what surfaces the bug. From
 there it's a fifteen-minute walk through `Request._get_form` to confirm the kwargs aren't
 passed to `FormParser`, and through `FormParser.__init__` to confirm there's nowhere to pass
 them anyway.
@@ -170,7 +170,7 @@ class FormParser:
         self.max_part_size = max_part_size
 ```
 
-**2. `Request._get_form` now plumbs the values through** — and, crucially, wraps the url-encoded
+**2. `Request._get_form` now plumbs the values through** and, crucially, wraps the url-encoded
 path in the same `MultiPartException → HTTPException(400)` handler the multipart path already
 had, so the limit failure becomes a clean `400` instead of a surfaced exception:
 
@@ -228,7 +228,7 @@ The risk profile of the bug is shaped almost entirely by who calls `request.form
   upstream body-size limit. Reverse proxies that normalise `Content-Type` or strip
   `Content-Length` headers make the upstream guard easier to skip.
 
-The CVSS 7.5 reflects `AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H` — network-reachable,
+The CVSS 7.5 reflects `AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H`: network-reachable,
 zero-interaction, no auth, full availability impact on a single host. Distributed across a
 worker pool it scales linearly.
 
@@ -243,7 +243,7 @@ worker pool it scales linearly.
 
 ## Takeaways
 
-- **Trust your own threat model — once.** The documented guards on `request.form()` were
+- **Trust your own threat model, once.** The documented guards on `request.form()` were
   the reason I was confident the upstream service was safe from URL-encoded body amplification.
   That confidence was the bug.
 - **Parsers should fail loud on dropped kwargs.** If `FormParser.__init__` is going to be

@@ -38,7 +38,7 @@
   --code-bg: 13 13 16;
 
   /* Hero aurora: warm accent wash + a cooler neutral counterweight. Alphas are
-     deliberately tiny — the effect should read as depth, not as colour. */
+     deliberately tiny: the effect should read as depth, not as colour. */
   --aurora-a: 0.085;
   --aurora-b: 0.035;
 
@@ -145,7 +145,7 @@ img {
    Reusable primitives
    ------------------------------------------------------------------ */
 @layer components {
-  /* Monospace section label — the small caps "// advisories" marker. */
+  /* Monospace section label: the small caps "// advisories" marker. */
   .label {
     @apply font-mono text-2xs uppercase tracking-label text-faint;
   }
@@ -268,7 +268,7 @@ html:not([data-theme='light']) .theme-icon-moon {
 }
 
 /* ------------------------------------------------------------------
-   Writeups index filter — CSS does the hiding, JS only flips attributes.
+   Writeups index filter: CSS does the hiding, JS only flips attributes.
    Without JS nothing is hidden, so every entry is still reachable.
    ------------------------------------------------------------------ */
 .filter-chip[aria-pressed='true'] {
@@ -659,7 +659,7 @@ details.toc-mobile[open] > summary .toc-caret {
    reader has to chase; everything below collapses to its final frame under
    prefers-reduced-motion (the global rule above zeroes every duration, and
    the ambient loops are additionally wrapped in no-preference so they never
-   even start). Nothing here hides content without JavaScript — the scroll
+   even start). Nothing here hides content without JavaScript; the scroll
    reveal only enters its hidden state once the script has confirmed the
    element is below the fold.
    ------------------------------------------------------------------ */

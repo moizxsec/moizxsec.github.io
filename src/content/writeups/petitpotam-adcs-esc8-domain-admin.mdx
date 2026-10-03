@@ -1,6 +1,6 @@
 ---
-title: "From Domain User to Golden Ticket — PetitPotam → AD CS ESC8 → DCSync"
-summary: "A full internal Active Directory compromise chain, walked end-to-end. Starting from an unprivileged domain account on a three-DC Windows Server 2019 forest, the assessment coerced a Domain Controller into authenticating against an attacker-controlled SMB relay, relayed the NTLM auth to AD Certificate Services, obtained a machine certificate, used it to issue a TGT, and dumped krbtgt — closing with a Golden Ticket for indefinite, log-quiet Domain Admin persistence."
+title: "From Domain User to Golden Ticket: PetitPotam → AD CS ESC8 → DCSync"
+summary: "A full internal Active Directory compromise chain, walked end-to-end. Starting from an unprivileged domain account on a three-DC Windows Server 2019 forest, the assessment coerced a Domain Controller into authenticating against an attacker-controlled SMB relay, relayed the NTLM auth to AD Certificate Services, obtained a machine certificate, used it to issue a TGT, and dumped krbtgt, closing with a Golden Ticket for indefinite, log-quiet Domain Admin persistence."
 date: 2025-05-30
 severity: Critical
 cvss: 9.9
@@ -14,7 +14,7 @@ type: "Research"
 readingTime: 9
 ---
 
-This writeup walks a complete internal Active Directory compromise — the kind that has been
+This writeup walks a complete internal Active Directory compromise, the kind that has been
 the bread-and-butter of red-team engagements since Will Schroeder and Lee Christensen published
 the [Certified Pre-Owned](https://www.specterops.io/wp-content/uploads/sites/3/2022/06/Certified_Pre-Owned.pdf)
 paper in 2021. The chain is well-trodden ground in red-team circles. What makes a given
@@ -34,12 +34,12 @@ attacker has nothing but a low-priv domain user and L2 reachability to the DC.
 | Domain           | `corp.local` (forest functional level: Windows Server 2016)                |
 | Domain Controllers | `DC1` (10.10.4.78), `DC6` (10.10.4.79), `DC2` (10.10.4.80)            |
 | OS               | Windows Server 2019 Standard                                              |
-| Identity         | `lowpriv@corp.local` — member of `Domain Users` only                      |
+| Identity         | `lowpriv@corp.local`, member of `Domain Users` only                      |
 | Network          | Internal LAN. RPC (135), SMB (445), Kerberos (88), HTTP (80), HTTPS (443) reachable on DC1 |
 | Policies         | NTLM allowed, SMB signing required, **LDAP signing not enforced**         |
 
 Nothing about that environment is unusual. The defining property is the **third row of the
-policies table** — LDAP signing not enforced — and the discovery, a few minutes in, that
+policies table** (LDAP signing not enforced) and the discovery, a few minutes in, that
 **AD CS Web Enrollment is on** the same forest.
 
 ## Reconnaissance
@@ -53,7 +53,7 @@ against this forest.
 **AD CS Web Enrollment is reachable.** `curl -I http://10.10.4.78/certsrv` returns
 `HTTP/1.1 200 OK` with `WWW-Authenticate: NTLM`. Directory bruteforcing surfaces
 `/certsrv/certrqus.asp` and the certificate request endpoints. The CA is enabled with the
-default `Machine` and `User` templates and — critically — **Request Disposition is set to
+default `Machine` and `User` templates and, critically, **Request Disposition is set to
 Issue**, meaning certificates are issued immediately on submission rather than queued for
 manual approval.
 
@@ -88,7 +88,7 @@ required.
 
 ## The chain
 
-### Step 1 — Set up the NTLM relay
+### Step 1: Set up the NTLM relay
 
 `ntlmrelayx` from Impacket, listening for inbound SMB authentications, configured to relay
 them to the CA's web enrollment endpoint and request a machine certificate using the
@@ -115,12 +115,12 @@ On startup:
 
 The relay is now waiting for any host to authenticate to the attacker over SMB.
 
-### Step 2 — Coerce the Domain Controller
+### Step 2: Coerce the Domain Controller
 
 [PetitPotam](https://github.com/topotam/PetitPotam) abuses the
 `EFSRPC` (Encrypting File System Remote Protocol) interface to make the target host call
 back to a specified UNC path with NTLM credentials. It is the cleanest of the coercion
-primitives because it does not require any privileges on the target — only LSARPC pipe
+primitives because it does not require any privileges on the target, only LSARPC pipe
 access, which `Authenticated Users` has by default.
 
 Aim it at the DC, listener pointing to the relay box:
@@ -149,7 +149,7 @@ The DC responds with a `ERROR_BAD_NETPATH` because the path doesn't resolve, but
 process it sends a fresh NTLM authentication to the relay. That authentication is now in
 flight against the CA's web enrollment endpoint.
 
-### Step 3 — Receive the certificate
+### Step 3: Receive the certificate
 
 Watching the relay log:
 
@@ -165,12 +165,12 @@ Watching the relay log:
 [*] Certificate successfully written to file
 ```
 
-`DC1$.pfx` is now sitting on disk — a valid certificate for the DC's machine account,
+`DC1$.pfx` is now sitting on disk, a valid certificate for the DC's machine account,
 signed by the forest CA, valid for the default lifetime of one year. There is no log on
 the DC that says "your identity was stolen". From the DC's perspective it sent an NTLM
 auth to a UNC path, got an error, and moved on.
 
-### Step 4 — Authenticate as DC1$
+### Step 4: Authenticate as DC1$
 
 Hand the PFX to `certipy-ad auth`, point at the DC, and let Kerberos do the rest:
 
@@ -191,7 +191,7 @@ Certipy v4.8.2 - by Oliver Lyak (ly4k)
 Two artefacts now: a TGT for `dc1$` in `dc1.ccache`, and the machine account's NT hash.
 Either is enough for the next step.
 
-### Step 5 — DCSync
+### Step 5: DCSync
 
 `secretsdump.py` against the DC using the `dc1$` hash, replicating the DS via the DRSUAPI
 method:
@@ -215,7 +215,7 @@ corp.local\fileshare:1103:aad3b435b51404eeaad3b435b51404ee:<REDACTED>:::
 
 `krbtgt` is the prize. Everything else in the output is dressing.
 
-### Step 6 — Domain Admin via Pass-the-Hash
+### Step 6: Domain Admin via Pass-the-Hash
 
 Evil-WinRM with the `Administrator` NT hash; no password ever guessed:
 
@@ -233,11 +233,11 @@ DC2
 
 Shell on the DC as Domain Administrator.
 
-### Step 7 — Persistence via Golden Ticket
+### Step 7: Persistence via Golden Ticket
 
 The TGT for the `dc1$` machine account expires. Re-running the coercion is noisy if anyone is
-watching the relay's auth logs. A Golden Ticket — a TGT forged offline using the krbtgt
-hash — sidesteps both problems. Forge with `ticketer.py`:
+watching the relay's auth logs. A Golden Ticket, a TGT forged offline using the krbtgt
+hash, sidesteps both problems. Forge with `ticketer.py`:
 
 ```bash
 ticketer.py -nthash <krbtgt nt hash> \
@@ -268,7 +268,7 @@ export KRB5CCNAME=$(pwd)/Administrator.ccache
 ```
 
 Every Kerberos-authenticated tool now operates as `Administrator@corp.local` without ever
-talking to the real KDC — and without ever needing the password. The ticket survives any
+talking to the real KDC, and without ever needing the password. The ticket survives any
 password reset on the real Administrator account because it isn't signed with that
 account's secret. Only resetting `krbtgt` (twice, with the documented invalidation procedure)
 invalidates it.
@@ -279,7 +279,7 @@ Each link in the chain has been public for years. The reasons it keeps landing a
 organisational, not technical:
 
 - **AD CS Web Enrollment defaults are still permissive.** Microsoft has been clear about
-  the ESC1–ESC15 family since 2021, but the default `User` and `Machine` templates with
+  the ESC1-ESC15 family since 2021, but the default `User` and `Machine` templates with
   Web Enrollment enabled remain the out-of-the-box configuration for first-time AD CS
   rollouts.
 - **NTLM is still on.** Outright disabling NTLM breaks too many applications. Most
@@ -296,8 +296,8 @@ organisational, not technical:
 
 In the order that has the biggest blast-radius impact:
 
-1. **Disable AD CS Web Enrollment**, or — if it's required for a specific subset of
-   workflows — split the issuing CA from the Web Enrollment endpoint and require explicit
+1. **Disable AD CS Web Enrollment**, or, if it's required for a specific subset of
+   workflows, split the issuing CA from the Web Enrollment endpoint and require explicit
    approval (`Request Disposition: Pending`).
 2. **Enable Extended Protection for Authentication (EPA)** on the CA's IIS endpoint and
    require HTTPS. EPA binds the inner authentication to the outer TLS channel, breaking
@@ -311,7 +311,7 @@ In the order that has the biggest blast-radius impact:
 5. **Restrict NTLM with the `Network Security: Restrict NTLM` GPOs.** Audit first, then
    deny incoming NTLM to DCs and CAs.
 6. **Rotate `krbtgt` twice per year**, following the
-   [Microsoft procedure](https://learn.microsoft.com/en-us/defender-for-identity/security-assessment-reset-krbtgt) —
+   [Microsoft procedure](https://learn.microsoft.com/en-us/defender-for-identity/security-assessment-reset-krbtgt):
    the second rotation must wait at least the maximum-allowed Kerberos ticket lifetime.
 7. **Monitor for** Event ID 4768 (TGT) and 4769 (service ticket) anomalies, specifically
    forged tickets with non-standard encryption types or PAC anomalies.
@@ -322,21 +322,21 @@ In the order that has the biggest blast-radius impact:
 
 If you only had one afternoon and an admin account, in priority order:
 
-- `Get-ADObject -SearchBase "CN=Certificate Templates,CN=Public Key Services,CN=Services,CN=Configuration,DC=corp,DC=local" -Filter * -Properties msPKI-Certificate-Name-Flag, msPKI-Enrollment-Flag, pKIExtendedKeyUsage`
-  — sanity-check every template for `EDITF_ATTRIBUTESUBJECTALTNAME2` (ESC6) and overbroad
+- `Get-ADObject -SearchBase "CN=Certificate Templates,CN=Public Key Services,CN=Services,CN=Configuration,DC=corp,DC=local" -Filter * -Properties msPKI-Certificate-Name-Flag, msPKI-Enrollment-Flag, pKIExtendedKeyUsage`:
+  sanity-check every template for `EDITF_ATTRIBUTESUBJECTALTNAME2` (ESC6) and overbroad
   Enroll permissions.
 - IIS Manager on the CA host → Authentication → confirm "Extended Protection" is `Required`.
 - `Get-SmbServerConfiguration | Format-List RequireSecuritySignature` should be `True`
   on every member server.
-- `Get-ADDomainController | ForEach-Object { Get-ADUser krbtgt -Server $_.Name -Properties PasswordLastSet }`
-  — krbtgt PasswordLastSet should be within the last six months, and Get-Date minus that
+- `Get-ADDomainController | ForEach-Object { Get-ADUser krbtgt -Server $_.Name -Properties PasswordLastSet }`:
+  krbtgt PasswordLastSet should be within the last six months, and Get-Date minus that
   should be at least 24 hours away from the previous rotation.
 
 ## Closing note
 
 The chain in this writeup is not novel work. It is one of the most-documented red-team
 chains in the public literature. Its persistence in real environments comes from the fact
-that every link in it is a default — Web Enrollment defaults, machine-account template
+that every link in it is a default: Web Enrollment defaults, machine-account template
 defaults, NTLM-enabled defaults, missing-LDAP-signing defaults, never-rotated-krbtgt
 defaults. The fix for each link individually is straightforward; the institutional work to
 fix all of them together is what makes the difference between a forest that falls in an

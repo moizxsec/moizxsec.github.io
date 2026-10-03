@@ -28,7 +28,7 @@ export const SITE = {
   handle: 'moizxsec',
   email: 'muezzism@gmail.com',
   github: 'https://github.com/moizxsec',
-  linkedin: 'https://www.linkedin.com/in/muezism101',
+  linkedin: 'https://www.linkedin.com/in/moizxsec',
   location: 'Lahore, PK',
   tagline: 'Offensive security engineer',
 };

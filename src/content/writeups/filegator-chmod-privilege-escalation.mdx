@@ -1,5 +1,5 @@
 ---
-title: "FileGator v7.14.0 — Privilege Escalation via Unvalidated chmod Endpoint"
+title: "FileGator v7.14.0: Privilege Escalation via Unvalidated chmod Endpoint"
 summary: "A low-privileged authenticated user with the chmod permission could set arbitrary Unix special permission bits (setuid, setgid, sticky) on any file or directory they could reach across all three storage adapters (Local, SFTP, FTP). With one recursive call, the entire repository tree could be flipped to setuid root."
 date: 2026-05-15
 severity: High
@@ -23,17 +23,17 @@ readingTime: 8
 
 [FileGator](https://github.com/filegator/filegator) is an open-source multi-user file manager
 written in PHP, widely deployed in shared-hosting and self-hosted setups. It supports three
-filesystem adapters out of the box — `Local`, `SFTP`, and `FTP` — and ships with a fine-grained
+filesystem adapters out of the box (`Local`, `SFTP`, and `FTP`) and ships with a fine-grained
 permission model (`read`, `write`, `upload`, `download`, `delete`, `chmod`, `zip`, ...) that lets
 administrators grant capabilities on a per-role basis.
 
 The `chmod` capability is intended to be a low-risk file-management primitive: change `0644` to
 `0600`, lock down a directory to `0700`, that sort of thing. In version 7.14.0 it accepted any
-integer the client wanted to send — including values that set the `setuid`, `setgid`, and
+integer the client wanted to send, including values that set the `setuid`, `setgid`, and
 `sticky` bits on the underlying filesystem.
 
-Any user with the `chmod` capability — which by default is granted to the standard `user` role
-— could therefore upload a binary, mark it `4777`, and obtain code execution as the file owner
+Any user with the `chmod` capability, which by default is granted to the standard `user` role,
+could therefore upload a binary, mark it `4777`, and obtain code execution as the file owner
 on the next invocation. On most deployments that file owner is `www-data` or `root`. The bug
 was reported on **2026-05-15**, patched in **v7.14.2 on 2026-05-18**, credited in the
 [FileGator changelog](https://github.com/filegator/filegator/blob/master/CHANGELOG.md), and
@@ -60,12 +60,12 @@ Cookie: filegator=<session>
 
 The two parameters that matter:
 
-- `permissions` — a string the backend will run through `octdec()` and hand straight to PHP's
+- `permissions`: a string the backend will run through `octdec()` and hand straight to PHP's
   `chmod()`.
-- `recursive` — when set to `"all"` and the item is a directory, the same permission is applied
+- `recursive`: when set to `"all"` and the item is a directory, the same permission is applied
   to every file and subdirectory below it.
 
-Standard Unix permission values live in the range `000`–`777`. Anything above that encodes a
+Standard Unix permission values live in the range `000`-`777`. Anything above that encodes a
 special bit:
 
 | Octal prefix | Bit            | What it means                                                  |
@@ -84,7 +84,7 @@ to the kernel. The PHP `octdec()` function happily converts `"4777"` to decimal 
 The complete chain assumes a single low-privilege account on the target installation. No admin
 access, no exotic preconditions.
 
-### Step 1 — Authenticate
+### Step 1: Authenticate
 
 ```http
 GET /index.php?r=/getuser HTTP/1.1
@@ -99,7 +99,7 @@ X-CSRF-Token: <token>
 
 The session cookie returned by the login response will be carried for the rest of the chain.
 
-### Step 2 — Drop a payload
+### Step 2: Drop a payload
 
 A shell script will do for the demonstration, but a compiled binary works the same way. The
 request below creates an empty file via the normal upload path:
@@ -117,10 +117,10 @@ user. On a typical install that's `www-data` or `root`.
 
 <figure>
   <img src="/images/filegator/01-dashboard.png" alt="FileGator authenticated dashboard showing the Permissions column for .gitignore at 644." />
-  <figcaption>Authenticated dashboard — Permissions column is the relevant UI element.</figcaption>
+  <figcaption>Authenticated dashboard: Permissions column is the relevant UI element.</figcaption>
 </figure>
 
-### Step 3 — Flip the setuid bit
+### Step 3: Flip the setuid bit
 
 ```http
 POST /index.php?r=/chmoditems HTTP/1.1
@@ -140,7 +140,7 @@ Server response:
 {"data":"Done"}
 ```
 
-### Step 4 — Confirm on disk
+### Step 4: Confirm on disk
 
 ```bash
 $ ls -la repository/exploit_target.sh
@@ -155,17 +155,17 @@ now runs as `root`.
 
 <figure>
   <img src="/images/filegator/02-before-644.png" alt="FileGator UI listing exploit_target.sh with permissions 644 before the exploit." />
-  <figcaption>Before exploitation — <code>exploit_target.sh</code> is created with mode 644.</figcaption>
+  <figcaption>Before exploitation: <code>exploit_target.sh</code> is created with mode 644.</figcaption>
 </figure>
 
 <figure>
   <img src="/images/filegator/03-after-777.png" alt="FileGator UI listing exploit_target.sh with permissions 777 after the exploit." />
-  <figcaption>After the chmoditems call — the UI reads 777, but the on-disk value is actually 4777. FileGator's permission column only renders three digits, so the setuid bit is invisible from the web interface.</figcaption>
+  <figcaption>After the chmoditems call: the UI reads 777, but the on-disk value is actually 4777. FileGator's permission column only renders three digits, so the setuid bit is invisible from the web interface.</figcaption>
 </figure>
 
 <figure>
   <img src="/images/filegator/04-exploit-summary.png" alt="Terminal-style summary: endpoint, payload, before/after mode, impact bullets, ls -la output." />
-  <figcaption>Summary of the chain — endpoint, payload, before/after, and reachable impact.</figcaption>
+  <figcaption>Summary of the chain: endpoint, payload, before/after, and reachable impact.</figcaption>
 </figure>
 
 <figure>
@@ -233,7 +233,7 @@ public function chmodItem(string $path, int $permissions)
 ```
 
 <figure>
-  <img src="/images/filegator/07-root-cause-code.png" alt="The vulnerable chmodItem method — three switch branches, all calling chmod with octdec(user input) and no bounds check." />
+  <img src="/images/filegator/07-root-cause-code.png" alt="The vulnerable chmodItem method: three switch branches, all calling chmod with octdec(user input) and no bounds check." />
   <figcaption>The vulnerable code path. The same unchecked input reaches all three storage adapters.</figcaption>
 </figure>
 
@@ -247,7 +247,7 @@ JSON body → FileController::chmodItems()
 ```
 
 There was no bounds check at any layer, and the controller didn't restrict the input type
-beyond "must be a number". All three adapters were equally affected — the bug wasn't a
+beyond "must be a number". All three adapters were equally affected; the bug wasn't a
 property of the Local backend, it was a property of the abstraction over all of them.
 
 ## Suggested fix
@@ -290,8 +290,8 @@ Functional behaviour is preserved; the exotic codepath is closed.
 ## A second finding while testing the fix
 
 While retesting, the new validation path fired as intended, but it surfaced the exception as an
-unhandled PHP fatal error. The full stack trace — including the absolute filesystem path of
-the FileGator install — was returned in the HTTP response body. Not a security control
+unhandled PHP fatal error. The full stack trace, including the absolute filesystem path of
+the FileGator install, was returned in the HTTP response body. Not a security control
 bypass, but a useful piece of reconnaissance for a follow-up attack and a real footgun for
 anyone deploying behind a reverse proxy that doesn't strip error pages.
 
@@ -315,7 +315,7 @@ v7.14.3.
 A few things worth pulling out of this one:
 
 - **`chmod` is not an innocuous permission.** Anywhere a web application exposes "set file
-  mode" to a user, the input has to be clamped to `0000`–`0777`. The special bits exist for
+  mode" to a user, the input has to be clamped to `0000`-`0777`. The special bits exist for
   legitimate reasons but the web tier is never the place to grant them.
 - **Treat the abstraction, not the implementation.** The bug existed once in `chmodItem()`
   and inherited itself into all three storage adapters. Fixing it in `Local` only would have
@@ -327,10 +327,10 @@ A few things worth pulling out of this one:
 
 ## Credit
 
-Crediting on this one was straightforward — the maintainer offered a CHANGELOG mention and
+Crediting on this one was straightforward: the maintainer offered a CHANGELOG mention and
 released the fix within three days of the report. The relevant changelog entry:
 
-> **7.14.2 — 2026-05-18**
+> **7.14.2 - 2026-05-18**
 > Security fix: validate permission bits when using chmod, reported by Abdul Moiz
 > (https://github.com/moizxsec).
 
@@ -339,8 +339,8 @@ CISA (as the CNA, `cisa-cg`) later assigned
 Permission Assignment for Critical Resource*, published 2026-07-21, sole credit **Abdul Moiz**.
 The official scoring reflects the authenticated-local nature of the chmod capability:
 
-- **CVSS 3.1: 7.3 (High)** — `AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:L`
-- **CVSS 4.0: 8.4 (High)** — `AV:L/AC:L/AT:N/PR:L/UI:N/VC:H/VI:H/VA:L/SC:N/SI:N/SA:N`
+- **CVSS 3.1: 7.3 (High)** (`AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:L`)
+- **CVSS 4.0: 8.4 (High)** (`AV:L/AC:L/AT:N/PR:L/UI:N/VC:H/VI:H/VA:L/SC:N/SI:N/SA:N`)
 
 The `AV:L` (local) vector is the honest call: exploitation requires an authenticated session
 with the `chmod` capability, so it is a privilege-escalation primitive for someone already

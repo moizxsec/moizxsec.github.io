@@ -9,7 +9,7 @@ const years = [...new Set(advisories.map((w) => w.data.date.getUTCFullYear()))].
 ---
 
 <BaseLayout
-  title={`CVEs & advisories — ${SITE.handle}`}
+  title={`CVEs & advisories | ${SITE.handle}`}
   description={`Security advisories and CVE disclosures by ${SITE.name}: identifiers, CVSS, affected versions, status, and full technical writeups.`}
 >
   <div class="max-w-site mx-auto px-4 sm:px-6 pt-12 sm:pt-16 pb-16">
@@ -18,7 +18,7 @@ const years = [...new Set(advisories.map((w) => w.data.date.getUTCFullYear()))].
       <h1 class="text-3xl sm:text-4xl font-semibold text-fg tracking-tight mb-4">CVEs &amp; advisories</h1>
       <p class="text-muted leading-relaxed">
         Every vulnerability I have reported to a maintainer, with its public identifier where one has
-        been assigned. Rows link to the full writeup — root cause, proof of concept, fix, and
+        been assigned. Rows link to the full writeup: root cause, proof of concept, fix, and
         timeline. The table is generated from each writeup's metadata, so it stays in step with the
         research.
       </p>
@@ -40,7 +40,7 @@ const years = [...new Set(advisories.map((w) => w.data.date.getUTCFullYear()))].
       <div class="bg-bg p-4">
         <dt class="label mb-1">Years active</dt>
         <dd class="font-mono text-2xl text-fg tabular-nums">
-          {years.length > 1 ? `${years[years.length - 1]}–${String(years[0]).slice(2)}` : (years[0] ?? '—')}
+          {years.length > 1 ? `${years[years.length - 1]}-${String(years[0]).slice(2)}` : (years[0] ?? '-')}
         </dd>
       </div>
     </dl>

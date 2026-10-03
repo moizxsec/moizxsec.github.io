@@ -18,7 +18,7 @@ AWS WAF is a layer-seven firewall, and like every layer-seven firewall it has to
 much of each request to actually look at. For request bodies, the default size limit is **8
 kilobytes**. Anything past the threshold passes through uninspected. AWS documents this
 clearly in the
-[WAF developer guide](https://docs.aws.amazon.com/waf/latest/developerguide/web-acl-statements-fields.html#waf-rule-statement-fields-body-request-component) —
+[WAF developer guide](https://docs.aws.amazon.com/waf/latest/developerguide/web-acl-statements-fields.html#waf-rule-statement-fields-body-request-component),
 but in production threat-modelling sessions I see the 8 KB number forgotten or
 underweighted again and again. This writeup is the bypass shape that follows from that
 oversight.
@@ -34,7 +34,7 @@ Three conditions have to hold simultaneously:
 1. The endpoint accepts a **file upload** or a request body large enough to plausibly
    exceed 8 KB.
 2. The uploaded content is **stored** somewhere (S3, EFS, a database BLOB) and is
-   subsequently **served back** to other users — directly, or through a CDN — without
+   subsequently **served back** to other users (directly, or through a CDN) without
    server-side sanitisation.
 3. The WAF rule set is leaned on as the primary XSS / payload-content control, rather than
    as one layer among several.
@@ -85,8 +85,8 @@ POST /api/upload HTTP/1.1
 
 → HTTP 200. The file is now in S3. The payload survived because the inspector never read it.
 
-When the file is later served back — typically rendered inline because the storage URL is
-public or because the application embeds it in HTML — the script tag is parsed by the
+When the file is later served back, typically rendered inline because the storage URL is
+public or because the application embeds it in HTML, the script tag is parsed by the
 browser. Stored XSS, with all the usual consequences for whichever user's session reaches the
 page first.
 
@@ -104,7 +104,7 @@ raise it costs you the assumption that the WAF is reading the whole body.
 ## Remediation, in order of how much I trust each layer
 
 The temptation is to bump the inspection limit and call it done. That helps but it does not
-fix the class of bug — it shifts the threshold, and a sufficiently determined attacker pushes
+fix the class of bug; it shifts the threshold, and a sufficiently determined attacker pushes
 the payload past the new threshold instead.
 
 The fix order I recommend:
@@ -132,7 +132,7 @@ items reduce blast radius if step one slips.
 
 ## A short list of related cases worth knowing
 
-This bypass shape — payload outside the inspection window — generalises beyond AWS WAF:
+This bypass shape (payload outside the inspection window) generalises beyond AWS WAF:
 
 - **CDN WAFs** (Cloudflare, Akamai, Imperva) all have body-inspection limits. Cloudflare
   default is 128 KB on enterprise plans, smaller on free/pro; Akamai is configurable per

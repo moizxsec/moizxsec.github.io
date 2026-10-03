@@ -3,7 +3,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 import { SITE } from '../lib/writeups';
 ---
 
-<BaseLayout title={`404 — ${SITE.handle}`} description="Page not found.">
+<BaseLayout title={`404 | ${SITE.handle}`} description="Page not found.">
   <div class="max-w-site mx-auto px-4 sm:px-6 py-24">
     <pre class="font-mono text-xs sm:text-sm text-faint mb-10 overflow-x-auto"><span class="text-muted">$</span> curl -sI <span id="nf-path" class="text-fg">{Astro.url.pathname}</span>
 HTTP/2 <span class="text-accent">404</span> Not Found

@@ -1,6 +1,6 @@
 ---
 title: "Sequelize Raw-Query SQL Injection via the Sort Parameter"
-summary: "Sequelize is the default ORM for most Node.js teams, and almost every team using it has at least one place where they reach past the parameterised API and write a raw query — typically to handle a feature the high-level API doesn't ergonomically support, like ORDER BY on a user-supplied column. That single shortcut is where the SQLi sneaks in. Walked end-to-end against a PostgreSQL backend serving PHI: error-based exfiltration in one path and time-based blind in another, both from the same root cause."
+summary: "Sequelize is the default ORM for most Node.js teams, and almost every team using it has at least one place where they reach past the parameterised API and write a raw query, typically to handle a feature the high-level API doesn't ergonomically support, like ORDER BY on a user-supplied column. That single shortcut is where the SQLi sneaks in. Walked end-to-end against a PostgreSQL backend serving PHI: error-based exfiltration in one path and time-based blind in another, both from the same root cause."
 date: 2026-04-25
 severity: Critical
 cvss: 9.8
@@ -17,7 +17,7 @@ readingTime: 8
 This writeup is the same class of bug walked through two different paths into the same
 Sequelize-backed API. One path leaks the database structure synchronously via error-based
 SQLi; the other leaks it asynchronously via time-based blind SQLi. The shape is identical in
-both cases — a user-supplied parameter is interpolated into a raw SQL fragment without
+both cases: a user-supplied parameter is interpolated into a raw SQL fragment without
 parameter binding. The findings come from an authorised engagement against a HIPAA-scope
 healthcare API; specifics are sanitised. The pattern is generic.
 
@@ -27,7 +27,7 @@ all work. Developers reach past them anyway, because the syntax for "ORDER BY co
 where both column and direction are user-supplied" doesn't have a single clean idiom in the
 high-level API. The result is the same bug, over and over, in slightly different shapes.
 
-## Path 1 — Error-based SQLi via the sort parameter
+## Path 1: Error-based SQLi via the sort parameter
 
 A list endpoint that accepts a JSON `sort` object:
 
@@ -57,7 +57,7 @@ That is the moment the bug enters production.
 ### The exploit
 
 Any value the attacker can sneak into `direction` is appended verbatim to the SQL string.
-PostgreSQL is a friendly target for this — the `CAST(...)` trick lets the attacker exfiltrate
+PostgreSQL is a friendly target for this: the `CAST(...)` trick lets the attacker exfiltrate
 strings as integers that get rendered in the error message when the cast fails:
 
 ```http
@@ -70,9 +70,9 @@ The query the server executes:
 SELECT * FROM records ORDER BY "name" ASC, (SELECT CAST(version() AS INT)) LIMIT 50
 ```
 
-`version()` returns a string. The cast fails. The error message that PostgreSQL returns —
+`version()` returns a string. The cast fails. The error message that PostgreSQL returns,
 which the API helpfully echoes back to the client because the development team never
-configured generic error handling — is:
+configured generic error handling, is:
 
 ```json
 {
@@ -82,8 +82,8 @@ configured generic error handling — is:
 ```
 
 That single response contains the full PostgreSQL version banner. The attacker now knows the
-exact version and platform. The technique generalises — `current_database()`,
-`current_user`, `information_schema.columns` — each one can be CAST-rendered into an
+exact version and platform. The technique generalises (`current_database()`,
+`current_user`, `information_schema.columns`), each one can be CAST-rendered into an
 integer-conversion error, and each one exfiltrates a different slice of the schema.
 
 A few iterations against the same endpoint with progressively more invasive payloads:
@@ -104,7 +104,7 @@ A few iterations against the same endpoint with progressively more invasive payl
 Schema discovery in three requests. The pattern works against any error-based payload that
 fits inside a PostgreSQL string-to-integer cast.
 
-## Path 2 — Time-based blind SQLi via the cohort parameter
+## Path 2: Time-based blind SQLi via the cohort parameter
 
 A different endpoint, same codebase, same root cause:
 
@@ -114,7 +114,7 @@ GET /api/records/12/items/pending?groupIds=1,2,3
 
 The handler this time builds a CTE query and inlines `groupIds` directly into it via
 `sequelize.query()`. Same lack of parameter binding. The error handler on this endpoint
-*does* swallow the raw error message — it returns a generic 500. So the error-based
+*does* swallow the raw error message: it returns a generic 500. So the error-based
 exfiltration that worked against `/api/records` doesn't work here. Time-based blind does.
 
 ```http
@@ -135,7 +135,7 @@ Bump the sleep:
 ```
 
 Linear in the sleep duration. That's the signal. Time-based blind exfiltration of arbitrary
-values follows the standard pattern — substring extraction in a `CASE WHEN` that triggers
+values follows the standard pattern: substring extraction in a `CASE WHEN` that triggers
 `pg_sleep` when the guessed character matches:
 
 ```sql
@@ -149,9 +149,9 @@ values follows the standard pattern — substring extraction in a `CASE WHEN` th
 
 Slow, but reliable. A reasonable wrapper script bumps through ASCII space and extracts
 arbitrary string values one character at a time. The full PostgreSQL version banner takes
-maybe 10–15 minutes per query depending on the timing tolerance.
+maybe 10-15 minutes per query depending on the timing tolerance.
 
-## Bonus — Cross-record enumeration
+## Bonus: Cross-record enumeration
 
 The same endpoint takes a `recordId` in the URL path:
 
@@ -160,7 +160,7 @@ GET /api/records/<recordId>/items/pending?groupIds=...
 ```
 
 `recordId` is interpolated raw into the same query alongside `groupIds`. There's no
-ownership check on the request — a user authenticated as record-owner #12 can query patient
+ownership check on the request: a user authenticated as record-owner #12 can query patient
 #15's items by just changing the URL. The SQLi is the headline finding; the IDOR
 sitting next to it is a parallel finding that pads the impact.
 
@@ -187,7 +187,7 @@ export async function getPendingItems(recordId: number, groupIds: string) {
 }
 ```
 
-Two string concatenations, two SQLi vectors. The CTE structure is incidental — the bug
+Two string concatenations, two SQLi vectors. The CTE structure is incidental: the bug
 would be exactly the same with a flat `SELECT`. Sequelize's `replacements` argument exists
 precisely to make this case safe:
 
@@ -264,12 +264,12 @@ app.use((err, req, res, next) => {
 ```
 
 Log the detail server-side. Return a generic message to the client. This single change
-demotes Path 1 from "easily exfiltrate schema" to "blind, requires time-based oracle" —
+demotes Path 1 from "easily exfiltrate schema" to "blind, requires time-based oracle":
 slower, noisier, much more detectable.
 
 ### 4. Enforce ownership at the route layer
 
-The IDOR sibling — `recordId` from the URL with no ownership check — needs middleware that
+The IDOR sibling, `recordId` from the URL with no ownership check, needs middleware that
 intersects the request's `recordId` with the cohort claims in the user's JWT:
 
 ```typescript
@@ -295,7 +295,7 @@ Three queries:
 # Direct raw-query antipattern
 grep -rEn 'sequelize\.query\(\s*`[^`]*\$\{[^}]+\}' --include="*.ts" --include="*.js"
 
-# Op.like with user input — different shape, same risk
+# Op.like with user input - different shape, same risk
 grep -rEn '\[Op\.like\]:\s*[`"]\$\{' --include="*.ts" --include="*.js"
 
 # Spread of req.query / req.body into where clauses (mass-assignment + SQLi)
@@ -307,7 +307,7 @@ Each one returns a list of candidates worth a half-hour of careful review.
 ## The lesson worth remembering
 
 ORMs do not, by themselves, protect against SQL injection. They make it *easier to write
-safe code* — the high-level API parameterises everything. They also make it easier to write
+safe code*: the high-level API parameterises everything. They also make it easier to write
 unsafe code, because the moment a developer reaches into `query()` they're back to writing
 raw SQL, and the same mental shift that comes with "I'm writing raw SQL, so I should
 parameterise everything" doesn't always happen.

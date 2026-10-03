@@ -7,7 +7,7 @@ const s = stats(await getPublished());
 ---
 
 <BaseLayout
-  title={`About — ${SITE.handle}`}
+  title={`About | ${SITE.handle}`}
   description={`${SITE.name} is an offensive security engineer: application security, identity attacks, cloud misconfiguration, and coordinated vulnerability disclosure.`}
 >
   <div class="max-w-site mx-auto px-4 sm:px-6 pt-12 sm:pt-16 pb-16">
@@ -36,17 +36,17 @@ const s = stats(await getPublished());
             Outside paid work I disclose vulnerabilities in open-source projects under responsible
             disclosure. I'm credited on the FileGator v7.14.2 changelog and the starlette draft
             advisory GHSA-cm5j-qvph-7x6w. I also conduct independent research engagements against
-            external attack surfaces — those clients stay confidential; the techniques don't.
+            external attack surfaces. Those clients stay confidential; the techniques don't.
           </p>
 
           <h2 id="what-i-work-on">What I work on</h2>
           <ul>
-            <li>Web and API penetration testing — OWASP, NIST 800-115, PTES, OSSTMM</li>
+            <li>Web and API penetration testing: OWASP, NIST 800-115, PTES, OSSTMM</li>
             <li>Active Directory and Entra&nbsp;ID / Azure&nbsp;AD identity attacks</li>
             <li>AWS WAF rule design and adversarial validation</li>
             <li>SAML, OAuth&nbsp;2.0, OIDC, JWT exploitation</li>
-            <li>Cloud misconfiguration — AWS, Azure, Firebase, Power Platform</li>
-            <li>LLM / agent security — prompt-injection defense, dual-LLM cascades, automated CVE triage</li>
+            <li>Cloud misconfiguration: AWS, Azure, Firebase, Power Platform</li>
+            <li>LLM / agent security: prompt-injection defense, dual-LLM cascades, automated CVE triage</li>
           </ul>
 
           <h2 id="how-to-reach-me">How to reach me</h2>
@@ -55,9 +55,9 @@ const s = stats(await getPublished());
             give me a reasonable window before public release.
           </p>
           <ul>
-            <li>Email — <a href={`mailto:${SITE.email}`}>{SITE.email}</a></li>
-            <li>GitHub — <a href={SITE.github} target="_blank" rel="noopener">github.com/moizxsec</a></li>
-            <li>LinkedIn — <a href={SITE.linkedin} target="_blank" rel="noopener">linkedin.com/in/muezism101</a></li>
+            <li>Email: <a href={`mailto:${SITE.email}`}>{SITE.email}</a></li>
+            <li>GitHub: <a href={SITE.github} target="_blank" rel="noopener">github.com/moizxsec</a></li>
+            <li>LinkedIn: <a href={SITE.linkedin} target="_blank" rel="noopener">linkedin.com/in/moizxsec</a></li>
           </ul>
 
           <h2 id="disclosure-policy">Disclosure policy</h2>
@@ -87,7 +87,7 @@ const s = stats(await getPublished());
           <div class="label mb-3">Elsewhere</div>
           <ul class="font-mono text-xs space-y-2">
             <li><a href={SITE.github} target="_blank" rel="noopener" class="text-muted hover:text-fg transition-colors">github.com/moizxsec ↗</a></li>
-            <li><a href={SITE.linkedin} target="_blank" rel="noopener" class="text-muted hover:text-fg transition-colors">linkedin.com/in/muezism101 ↗</a></li>
+            <li><a href={SITE.linkedin} target="_blank" rel="noopener" class="text-muted hover:text-fg transition-colors">linkedin.com/in/moizxsec ↗</a></li>
             <li><a href={`mailto:${SITE.email}`} class="text-muted hover:text-fg transition-colors break-all">{SITE.email}</a></li>
             <li><a href="/rss.xml" class="text-muted hover:text-fg transition-colors">rss feed</a></li>
           </ul>

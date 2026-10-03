@@ -1,6 +1,6 @@
 ---
 title: "One-Click Account Takeover via OAuth Implicit Flow and Lax Redirect URI Validation"
-summary: "Azure AD tenants that still allow the OAuth 2.0 implicit grant — paired with redirect URI lists that accept arbitrary domains, or with hosts in the allow-list that proxy redirects — give an attacker a single-link account takeover. The victim clicks a normal Microsoft login URL, authenticates against their real tenant, and the access token is delivered to an attacker-controlled domain in the URL fragment of the response."
+summary: "Azure AD tenants that still allow the OAuth 2.0 implicit grant (paired with redirect URI lists that accept arbitrary domains, or with hosts in the allow-list that proxy redirects) give an attacker a single-link account takeover. The victim clicks a normal Microsoft login URL, authenticates against their real tenant, and the access token is delivered to an attacker-controlled domain in the URL fragment of the response."
 date: 2026-05-14
 severity: Critical
 cvss: 9.8
@@ -22,10 +22,10 @@ redirect response, which means it ends up in the browser's address bar and in an
 the redirect target controls. The recommended replacement is the authorisation-code flow
 with PKCE.
 
-It is still possible — and common — to find Azure AD tenants in 2026 with implicit grant
+It is still possible, and common, to find Azure AD tenants in 2026 with implicit grant
 enabled on one or more registered applications. When that's combined with a redirect URI list
-that includes a domain the attacker controls — or with a host inside the allow-list that
-itself does an open redirect — the result is a one-click account takeover.
+that includes a domain the attacker controls, or with a host inside the allow-list that
+itself does an open redirect, the result is a one-click account takeover.
 
 I've seen this pattern three times in two months across independent engagements, all on
 otherwise mature Azure AD tenants. This writeup is the generic shape, written so it is useful
@@ -41,7 +41,7 @@ An Azure AD tenant has an Enterprise Application or App Registration that:
 
 The attacker crafts a URL pointing at the victim's *real* `login.microsoftonline.com`
 endpoint, with `response_type=token`, the application's `client_id`, and a `redirect_uri`
-that the tenant accepts. The victim — already signed in, or signs in normally — authenticates
+that the tenant accepts. The victim (already signed in, or signs in normally) authenticates
 against their genuine identity provider. The IDP responds with an HTTP 302 to the redirect
 URI, carrying the freshly minted access token in the URL fragment:
 
@@ -54,8 +54,8 @@ https://login.microsoftonline.com/<tenant>/oauth2/v2.0/authorize
   &nonce=<random>
 ```
 
-If the tenant's allow-list contains `https://evil.example/steal` — or, more commonly, a URI
-that *redirects to* `https://evil.example/steal` — the IDP redirects the victim there with
+If the tenant's allow-list contains `https://evil.example/steal` (or, more commonly, a URI
+that *redirects to* `https://evil.example/steal`), the IDP redirects the victim there with
 the access token attached. The attacker reads the fragment from the request log on
 `evil.example`, replays the token against Microsoft Graph, and operates as the victim for the
 lifetime of the token.
@@ -86,8 +86,8 @@ URIs once an application is registered.
 
 ### 2. Open redirect inside a trusted host in the allow-list
 
-The allow-list contains only legitimate domains, but one of them — typically a marketing or
-landing-page subdomain — implements its own redirect parameter that the attacker can abuse:
+The allow-list contains only legitimate domains, but one of them, typically a marketing or
+landing-page subdomain, implements its own redirect parameter that the attacker can abuse:
 
 ```
 https://login.microsoftonline.com/.../authorize
@@ -111,7 +111,7 @@ the one that returns a valid token rather than an `AADSTS` error.
 
 This works because some first-party Microsoft apps still ship with implicit grant enabled for
 backward-compatibility reasons. If the redirect URI list on that app accepts an attacker
-domain — or, again, contains an open-redirect host — the rest of the chain follows.
+domain (or, again, contains an open-redirect host), the rest of the chain follows.
 
 ## Why it lands so often
 

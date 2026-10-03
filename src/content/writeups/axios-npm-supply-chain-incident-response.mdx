@@ -1,6 +1,6 @@
 ---
-title: "The Axios npm Supply-Chain Attack — One Org's Twenty-Four Hours"
-summary: "On March 31 2026, two compromised versions of the axios package were published to npm carrying a hidden cross-platform RAT attributed to BlueNoroff (a Lazarus Group subunit). This is the incident-response narrative from inside one organisation that was in scope and survived without compromise — what we did between the public disclosure landing in our Slack and the final containment ticket closing the next afternoon. Times, evidence, decisions, the gaps we found in our own visibility along the way."
+title: "The Axios npm Supply-Chain Attack: One Org's Twenty-Four Hours"
+summary: "On March 31 2026, two compromised versions of the axios package were published to npm carrying a hidden cross-platform RAT attributed to BlueNoroff (a Lazarus Group subunit). This is the incident-response narrative from inside one organisation that was in scope and survived without compromise: what we did between the public disclosure landing in our Slack and the final containment ticket closing the next afternoon. Times, evidence, decisions, the gaps we found in our own visibility along the way."
 date: 2026-04-01
 severity: Critical
 product: "npm registry / Node.js supply chain"
@@ -18,8 +18,8 @@ maintainer account that had been compromised some weeks earlier. The packages pu
 hidden transitive dependency, `plain-crypto-js@4.2.1`, which carried a heavily obfuscated
 JavaScript payload that ran via the `postinstall` hook and dropped a cross-platform RAT.
 The campaign was later
-[attributed to BlueNoroff](https://www.crowdstrike.com/blog/) — a subunit of the Lazarus
-Group — with medium-to-high confidence, based on the C2 infrastructure, the
+[attributed to BlueNoroff](https://www.crowdstrike.com/blog/), a subunit of the Lazarus
+Group, with medium-to-high confidence, based on the C2 infrastructure, the
 prior-known-clean decoy pattern, and the persistence-mechanism overlap with previous
 DPRK-affiliated supply-chain operations.
 
@@ -35,7 +35,7 @@ from a private CI on AWS CodeBuild. Every repository pins its dependencies via c
 `package-lock.json`. There is no `npm install --no-package-lock` in any production pipeline,
 which turns out to matter quite a bit over the next twenty-four hours.
 
-Detection was outsourced to two layers — SentinelOne EDR on all build hosts and corporate
+Detection was outsourced to two layers: SentinelOne EDR on all build hosts and corporate
 endpoints, and a custom dependency-watch agent that nightly walks every lockfile and
 correlates installed versions against the
 [OSV.dev](https://osv.dev/), GitHub Advisory, and NVD feeds. Neither layer was the channel
@@ -43,17 +43,17 @@ that surfaced this incident.
 
 ## The first 30 minutes
 
-**12:30 AM PKT — Slack notification.** A staff engineer in a separate team flagged a
+**12:30 AM PKT: Slack notification.** A staff engineer in a separate team flagged a
 [GitHub Security Advisory](https://github.com/advisories/) and the matching Snyk write-up in
-the internal `#sec-watch` channel. The advisory text was the only thing the team had — no
+the internal `#sec-watch` channel. The advisory text was the only thing the team had: no
 hash, no C2 indicator, no SLSA provenance line yet.
 
-**12:39 AM PKT — Initial classification.** The first on-call responder pulled the public
+**12:39 AM PKT: Initial classification.** The first on-call responder pulled the public
 advisory and Snyk write-up, confirmed two versions affected (`1.14.1`, `0.30.4`), confirmed
 the payload was `plain-crypto-js@4.2.1` injected as a transitive dependency. Severity
 flagged as needing escalation, but no IOCs published yet.
 
-**10:51 AM PKT (April 1) — Escalation.** By morning, the public IOC set had landed: the
+**10:51 AM PKT (April 1): Escalation.** By morning, the public IOC set had landed: the
 malicious package SHA1 hashes, the C2 domain (`sfrclak.com`), the C2 IP
 (`142.11.206.73:8000`), a User-Agent string spoofed to look like IE 6 on Windows XP, and
 host-based artefacts (`%PROGRAMDATA%\wt.exe` on Windows, `/tmp/ld.py` on Linux,
@@ -63,17 +63,17 @@ That's where the actual work starts.
 
 ## The triage
 
-**10:53 AM — Repo enumeration.** Six active Node.js repositories in scope:
+**10:53 AM: Repo enumeration.** Six active Node.js repositories in scope:
 `service-a`, `service-b`, `integration-c`, `api-d`, `worker-e`, `lambda-f`. The
 question for each is binary: does this repo, today, ship `axios@1.14.1` or `axios@0.30.4`,
 or does its lockfile pull in `plain-crypto-js@4.2.1` at any version?
 
-**10:56 AM — Tooling check.** The dependency-watch agent had not flagged anything because
+**10:56 AM: Tooling check.** The dependency-watch agent had not flagged anything because
 the advisory was less than 12 hours old and the agent's daily cron hadn't fired since
 midnight UTC. The next scheduled run was 14 hours away. Manual triage was the only option
 on the table.
 
-**11:00 – 11:03 AM — SBOM scan.** First pass — grep against every committed
+**11:00-11:03 AM: SBOM scan.** First pass: grep against every committed
 `package-lock.json` and `yarn.lock` in every repo:
 
 ```bash
@@ -86,47 +86,47 @@ transitive dependency that grep against the version string misses (e.g., a paren
 `^1.0.0` and the lockfile would have resolved it to a clean version). Need to walk the
 dependency tree per repo.
 
-**11:07 AM PKT — `axios@1.12.2` confirmed across the affected repos.** Manual `npm ls
+**11:07 AM PKT: `axios@1.12.2` confirmed across the affected repos.** Manual `npm ls
 axios` against `service-a` and `integration-c` showed both pinned to `1.12.2` via direct
 and transitive paths. The lockfiles confirmed the resolution. Both are below the
 compromise window (`1.14.x`) and above the older compromised release (`0.30.x`).
 
-**11:36 AM — VPC flow log check.** The lead asked for a check against the C2 IP
+**11:36 AM: VPC flow log check.** The lead asked for a check against the C2 IP
 (`142.11.206.73`) over the previous two days. The on-call had to discover, on the spot,
 that **VPC flow logs were not being forwarded to our log aggregator**. Manual queries
 against AWS CloudWatch directly returned zero events over a 2-day window covering the
 attack window. The visibility gap was real but the answer was the right one: zero outbound
 contact with the C2 IP from any of the affected accounts.
 
-**12:08 PM — Manual triage of all six repos.** I walked the remaining four repos
+**12:08 PM: Manual triage of all six repos.** I walked the remaining four repos
 (`service-b`, `api-d`, `worker-e`, `lambda-f`) with `npm audit` and `npm ls`. None
 of them include `axios` in their dependency tree at all. The relief is real but the methodology
 matters more: `npm audit` showed clean against the advisory feed, and `npm ls` independently
 confirmed the package was not resolved into the tree.
 
-**12:14 PM — Containment escalation.** With the technical answer clear (not compromised) the
+**12:14 PM: Containment escalation.** With the technical answer clear (not compromised) the
 question shifted to containment hygiene. The lead asked for the IP block on AWS WAF to be
 extended from production to all corporate endpoints. The reasoning: even though we hadn't
 seen outbound contact, the malicious package could land on a developer workstation via
 `npm install` of an unrelated personal project that pulled it in transitively. Defence in
 depth.
 
-**12:17 PM — Production WAF and SentinelOne rules in place.** WAF rule blocked
+**12:17 PM: Production WAF and SentinelOne rules in place.** WAF rule blocked
 `142.11.206.73` across all production endpoints. SentinelOne firewall rule "Axios
 Vulnerability IP" deployed to Linux servers and Windows workstations, blocking both
 directions to/from the C2 IP.
 
-**12:19 PM — Endpoint hash block.** SentinelOne file-hash block deployed across all
+**12:19 PM: Endpoint hash block.** SentinelOne file-hash block deployed across all
 Linux servers and corporate workstations using the MD5 of `plain-crypto-js-4.2.1.tgz`
-(`58401c195fe0a6204b42f5f90995ece5fab74ce7c69c67a24c61a057325af668` — sha256 in this case,
+(`58401c195fe0a6204b42f5f90995ece5fab74ce7c69c67a24c61a057325af668`; sha256 in this case,
 hash type configured per the EDR's signature engine).
 
-**12:36 PM – 1:03 PM — CI/CD pipeline verification.** The lead asked about pipeline runs in the
-attack window (05:00–09:00 AM PKT, March 31). The DevOps lead confirmed no
+**12:36 PM-1:03 PM: CI/CD pipeline verification.** The lead asked about pipeline runs in the
+attack window (05:00-09:00 AM PKT, March 31). The DevOps lead confirmed no
 CodePipeline runs were triggered in the dev account during that window. GitHub Actions
 runs across all six Node.js repos were verified clean.
 
-**1:19 PM — SentinelOne IOC sweep across the full corporate fleet.** The second engineer ran a
+**1:19 PM: SentinelOne IOC sweep across the full corporate fleet.** The second engineer ran a
 seven-day backward sweep using the host-based artefacts:
 
 ```
@@ -138,16 +138,16 @@ NetworkUrl contains "sfrclak" OR DstIP == "142.11.206.73"
 excluded against `\Windows\`, `\Program Files\`, `node_modules`, `npm install`, and `yarn
 install` to drop the obvious-benign noise. Zero hits across the seven-day window.
 
-**1:22 PM — Sweep confirmed clean across both Corporate Endpoints and Cloud
+**1:22 PM: Sweep confirmed clean across both Corporate Endpoints and Cloud
 Infrastructure endpoint groups.**
 
-**1:25 PM — One more observation.** RAT artefacts persist on disk even after the
+**1:25 PM: One more observation.** RAT artefacts persist on disk even after the
 installer self-deletes. We were relying on log retention for the seven-day window to be
 authoritative. The retention policy is, in fact, seven days. Edge case acknowledged: if the
 campaign predated the retention window by even one day, we'd have a coverage gap. Worth
 filing as a separate hardening item but not material to this incident.
 
-**1:27 PM — Closing the visibility gap.** The security lead filed the action item for VPC flow logs →
+**1:27 PM: Closing the visibility gap.** The security lead filed the action item for VPC flow logs →
 Datadog integration. It was the one piece of telemetry we had to manually query CloudWatch
 for during the incident; ten more minutes spent doing that during a fast-moving response
 is ten minutes too many.
@@ -158,12 +158,12 @@ is ten minutes too many.
 
 | Check                                                | Result                                                          |
 | ---------------------------------------------------- | --------------------------------------------------------------- |
-| Malicious npm version installed anywhere             | Clear — all repos pinned to `axios@1.12.2` via lockfiles        |
-| C2 IP contact (`142.11.206.73`)                      | Clear — zero events in VPC flow logs over 2-day window          |
-| Host-based IOC artefacts                             | Clear — SentinelOne sweep 0 hits across 7-day window            |
-| CI/CD pipelines triggered in attack window           | Clear — no CodePipeline runs in dev account in the window       |
-| `plain-crypto-js` dependency present in any repo     | Clear — not in any lockfile                                     |
-| Outbound C2 domain (`sfrclak.com`) contact           | Clear — SentinelOne network query 0 matches                     |
+| Malicious npm version installed anywhere             | Clear: all repos pinned to `axios@1.12.2` via lockfiles        |
+| C2 IP contact (`142.11.206.73`)                      | Clear: zero events in VPC flow logs over 2-day window          |
+| Host-based IOC artefacts                             | Clear: SentinelOne sweep 0 hits across 7-day window            |
+| CI/CD pipelines triggered in attack window           | Clear: no CodePipeline runs in dev account in the window       |
+| `plain-crypto-js` dependency present in any repo     | Clear: not in any lockfile                                     |
+| Outbound C2 domain (`sfrclak.com`) contact           | Clear: SentinelOne network query 0 matches                     |
 
 ## What the incident actually taught the team
 
@@ -173,7 +173,7 @@ Three things stick.
 
 Every repo was pinned. The investigation was a verification exercise against a known fixed
 point, not a discovery exercise. If `package-lock.json` had been excluded from version
-control in any of the six repos — which is a default in some scaffolds — the investigation
+control in any of the six repos (which is a default in some scaffolds), the investigation
 would have shifted from *"did we get this version"* to *"what version were we resolving to
 at the time of the build"* and the answer would have required reproducing the build from
 scratch.
@@ -187,7 +187,7 @@ the second one undoes it.
 
 The VPC flow logs → Datadog gap was a documented backlog item that nobody had prioritised.
 A real incident moved it from `backlog` to `urgent` within minutes. The lesson is not "fix
-the backlog faster" — that's always true and never actionable. The lesson is to write
+the backlog faster"; that's always true and never actionable. The lesson is to write
 incident drills that **deliberately exercise the visibility surface**, so the gaps surface
 before the next real attack lands.
 
@@ -199,7 +199,7 @@ didn't?" exposed two more gaps that were filed and closed before they mattered.
 
 The campaign published a *clean* `plain-crypto-js@4.2.1` 18 hours before the malicious
 versions of axios were released. The 18-hour gap exists to bypass age-based security
-scanners (Socket, Snyk, etc) that distrust packages younger than 24–48 hours. The decoy
+scanners (Socket, Snyk, etc) that distrust packages younger than 24-48 hours. The decoy
 package was the trust-anchor; by the time the malicious axios versions resolved it, it
 looked like a normal mature dependency.
 
@@ -240,7 +240,7 @@ self-deleting installer with persistent artefacts), and C2 infrastructure overla
 
 That said, attribution in the supply-chain space is best held loosely. It is a useful prior
 for threat-hunting hypotheses, not a hard fact for incident scoping. The incident response
-above didn't change shape based on attribution — same containment, same scope — and that's
+above didn't change shape based on attribution (same containment, same scope), and that's
 the right relationship between attribution and response. The actor matters strategically;
 the actions matter operationally.
 
@@ -253,6 +253,6 @@ the actions matter operationally.
 - A new dependency-watch rule alerts on any transitive dependency added within 24 hours of
   a parent package update, regardless of advisory state.
 
-The pipeline was the real audit failure — not because it missed anything that mattered in
+The pipeline was the real audit failure, not because it missed anything that mattered in
 this incident, but because the team had to discover its limits in the middle of the
 incident itself. The drills closed that loop.

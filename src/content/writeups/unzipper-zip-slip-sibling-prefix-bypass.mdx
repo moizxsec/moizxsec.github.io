@@ -1,6 +1,6 @@
 ---
-title: "unzipper — Zip Slip Arbitrary File Write via a Sibling-Prefix Path Bypass"
-summary: "unzipper already blocks classic ../../ Zip Slip — it was patched for CVE-2018-1002203 years ago. But the guard it shipped was a string-prefix check (extractPath.indexOf(destination) != 0), and a string prefix is not a directory boundary. An archive entry named ../dest-evil/x escapes /tmp/dest into the sibling /tmp/dest-evil, which the old check happily accepts because the path starts with the destination string. One crafted entry writes a file outside the extraction root. CVE-2026-59972 — reported, root-caused, and patched upstream, on a package pulling ~29M downloads a week."
+title: "unzipper: Zip Slip Arbitrary File Write via a Sibling-Prefix Path Bypass"
+summary: "unzipper already blocks classic ../../ Zip Slip; it was patched for CVE-2018-1002203 years ago. But the guard it shipped was a string-prefix check (extractPath.indexOf(destination) != 0), and a string prefix is not a directory boundary. An archive entry named ../dest-evil/x escapes /tmp/dest into the sibling /tmp/dest-evil, which the old check happily accepts because the path starts with the destination string. One crafted entry writes a file outside the extraction root. CVE-2026-59972: reported, root-caused, and patched upstream, on a package pulling ~29M downloads a week."
 date: 2026-07-16
 severity: High
 cvss: 8.1
@@ -23,7 +23,7 @@ readingTime: 8
 ---
 
 [`unzipper`](https://www.npmjs.com/package/unzipper) is one of the default ways Node.js code
-reads ZIP archives — roughly **29 million downloads a week**. When you extract an archive from
+reads ZIP archives, roughly **29 million downloads a week**. When you extract an archive from
 an untrusted source, the one thing you are trusting the library to do is keep every file inside
 the directory you asked for. unzipper tries to. It had already been patched for classic Zip
 Slip (`../../etc/...`) under CVE-2018-1002203. The problem is *how* it was patched: with a
@@ -32,7 +32,7 @@ string-prefix check. And a string prefix is not a directory boundary.
 This is [CVE-2026-59972](https://github.com/ZJONSSON/node-unzipper/security/advisories/GHSA-2756-j7rr-9464)
 ([GHSA-2756-j7rr-9464](https://github.com/ZJONSSON/node-unzipper/security/advisories/GHSA-2756-j7rr-9464)),
 CVSS 8.1, [CWE-22 Path Traversal](https://cwe.mitre.org/data/definitions/22.html). It is a
-*bypass* of the existing mitigation, not a reopening of the original bug — the classic vector
+*bypass* of the existing mitigation, not a reopening of the original bug: the classic vector
 stays blocked. I reported it, wrote the root-cause analysis, and authored the upstream patch;
 the fix shipped in `0.12.5`.
 
@@ -42,7 +42,7 @@ Here is the containment check as it stood in `lib/extract.js` (and, nearly ident
 `lib/Open/directory.js`):
 
 ```js
-// lib/extract.js — vulnerable
+// lib/extract.js - vulnerable
 opts.path = path.resolve(path.normalize(opts.path));
 
 const extractPath = path.join(
@@ -67,7 +67,7 @@ Entry path:   ../out-evil/file.txt
 Resolved to:  /srv/out-evil/file.txt
 ```
 
-`"/srv/out-evil/file.txt".indexOf("/srv/out")` is `0` — the sibling path **does** begin with
+`"/srv/out-evil/file.txt".indexOf("/srv/out")` is `0`; the sibling path **does** begin with
 the destination string, because `out-evil` shares the `out` prefix. The check passes. The file
 is written to `/srv/out-evil/file.txt`, which is outside `/srv/out`.
 
@@ -98,7 +98,7 @@ intended dest contents:     []
 ```
 
 The intended destination is empty; the payload landed in the sibling `/tmp/dest-evil`. The
-classic traversal in the same test is still blocked — confirming this is a new bypass class,
+classic traversal in the same test is still blocked, confirming this is a new bypass class,
 not the 2018 bug resurfacing. The same escape works through the `Open` API
 (`unzipper.Open.*` → `extract()`), because `lib/Open/directory.js` carried a copy of the same
 prefix check.
@@ -107,15 +107,15 @@ prefix check.
 
 The vector is `AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:H/A:H`: network-reachable input, low complexity,
 no privileges, but it needs the victim to extract an attacker-supplied archive
-(`UI:R`), and the payoff is **high integrity and high availability** impact — arbitrary file
+(`UI:R`), and the payoff is **high integrity and high availability** impact: arbitrary file
 *write* outside the root. Write-primitives are rarely the end of the story:
 
 - overwrite application source or config that is later loaded,
 - drop a file into a directory that is served or executed,
 - corrupt build artifacts or adjacent service data.
 
-The escape is constrained — it reaches siblings that share the destination's prefix, not the
-whole filesystem — but "constrained arbitrary write" on a dependency with eight-figure weekly
+The escape is constrained (it reaches siblings that share the destination's prefix, not the
+whole filesystem), but "constrained arbitrary write" on a dependency with eight-figure weekly
 install counts is still a serious supply-chain exposure. The blast radius is every service that
 extracts untrusted ZIPs with unzipper and assumed the existing Zip Slip patch had it covered.
 
@@ -125,7 +125,7 @@ I was reviewing how a service handled uploaded ZIPs and checked the extraction g
 than trusting the CHANGELOG line that said Zip Slip was fixed. The guard was a single
 `indexOf(...) != 0`. That pattern is a tell: a prefix test on a path string treats
 `/srv/out` and `/srv/out-evil` as the same boundary. The fix for CVE-2018-1002203 had swapped
-one incomplete check for a slightly less incomplete one — it stopped `../../` but never
+one incomplete check for a slightly less incomplete one: it stopped `../../` but never
 enforced the directory boundary it was pretending to enforce.
 
 Confirming it was one crafted archive entry. The sibling-prefix name escaped on the first run,
@@ -138,7 +138,7 @@ the path *from* the destination *to* the target; if the target is genuinely insi
 destination, that relative path never starts with `..` and is never absolute:
 
 ```js
-// lib/extract.js — patched (0.12.5)
+// lib/extract.js - patched (0.12.5)
 const extractPath = path.join(opts.path, entry.path.replace(/\\/g, '/'));
 const rel = path.relative(opts.path, extractPath);
 if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) {
@@ -146,7 +146,7 @@ if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) {
 }
 ```
 
-- `rel.startsWith('..')` rejects anything that climbs out of the destination — including the
+- `rel.startsWith('..')` rejects anything that climbs out of the destination, including the
   sibling-prefix case, because `path.relative('/srv/out', '/srv/out-evil/file.txt')` is
   `../out-evil/file.txt`, which starts with `..`.
 - `path.isAbsolute(rel)` rejects entries that resolve onto a different root (e.g. absolute

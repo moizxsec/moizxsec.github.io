@@ -1,6 +1,6 @@
 ---
 title: "Angular bypassSecurityTrustHtml + Missing httpOnly = Session Hijack on a PHI App"
-summary: "Angular ships a sanitiser specifically to keep developers out of trouble. Calling bypassSecurityTrustHtml() turns that protection off for the rest of the request lifecycle, and most codebases that reach for it do so without grasping how complete the bypass is. Combine that with an auth-token cookie that's missing the httpOnly attribute, and the result is a single stored payload that exfiltrates every viewer's session — including the administrators reviewing the affected record. Walked end-to-end on a HIPAA-scope application; client identifiers redacted."
+summary: "Angular ships a sanitiser specifically to keep developers out of trouble. Calling bypassSecurityTrustHtml() turns that protection off for the rest of the request lifecycle, and most codebases that reach for it do so without grasping how complete the bypass is. Combine that with an auth-token cookie that's missing the httpOnly attribute, and the result is a single stored payload that exfiltrates every viewer's session, including the administrators reviewing the affected record. Walked end-to-end on a HIPAA-scope application; client identifiers redacted."
 date: 2026-04-20
 severity: Critical
 cvss: 9.0
@@ -18,7 +18,7 @@ Two findings on their own. A `Stored XSS` finding via Angular's
 `bypassSecurityTrustHtml()` escape hatch, and an `auth-token cookie missing httpOnly`
 configuration note. Either one in isolation gets filed Medium. Together they chain into a
 **no-interaction, no-tooling, fully-automated session hijack** that fires the moment any
-authenticated user — including an administrator — opens the affected record.
+authenticated user, including an administrator, opens the affected record.
 
 This is the class of finding that gets stamped High individually and Critical when
 correlated. Walked here as a chained writeup because the chain is the whole point. Specifics
@@ -27,11 +27,11 @@ patterns are generic to any Angular codebase serving any sensitive data.
 
 ## The two ingredients
 
-### Ingredient 1 — `bypassSecurityTrustHtml`
+### Ingredient 1: `bypassSecurityTrustHtml`
 
 Angular's `DomSanitizer` is the framework's primary XSS defence. When you bind a string into
 the DOM with `[innerHTML]`, Angular runs that string through the sanitiser and strips
-anything dangerous — `<script>` tags, event handlers, `javascript:` URLs, the standard
+anything dangerous: `<script>` tags, event handlers, `javascript:` URLs, the standard
 catalogue. The defence is enabled by default; you'd have to actively opt out of it to get a
 script tag into the page.
 
@@ -54,10 +54,10 @@ benign motivation looks reasonable in code review.
 
 Once the bypass is in place, **every** value flowing through that method into an
 `[innerHTML]` binding is treated as trusted markup. The trust is transitive across the
-type system — a `SafeHtml` value can be passed around freely without Angular ever
+type system: a `SafeHtml` value can be passed around freely without Angular ever
 reconsidering whether it actually deserved that trust.
 
-### Ingredient 2 — Auth-token cookie without `httpOnly`
+### Ingredient 2: Auth-token cookie without `httpOnly`
 
 The application's authentication token was set on login via:
 
@@ -73,7 +73,7 @@ res.cookie('app.session', token, {
 The cookie is `Secure`. It has `SameSite=Lax`. What it doesn't have is `HttpOnly`. That
 single missing attribute means **JavaScript in the same origin can read the cookie value
 via `document.cookie`**. Any XSS that lands on the application can extract the cookie
-trivially — no DOM-clobbering, no complex same-site bypass.
+trivially: no DOM-clobbering, no complex same-site bypass.
 
 This is the second time in this writeup where the configuration is *almost* right. `Secure`
 + `SameSite=Lax` is a reasonable starting point; the missing `HttpOnly` is the line of
@@ -99,8 +99,8 @@ A user with write access to an exam record posts an updated report containing:
 
 Angular's normal sanitiser would strip the `onerror` attribute outright. The bypass means it
 doesn't. The text is stored to the database verbatim. Anyone who later loads the affected
-exam — clinicians reviewing the record, administrators auditing it, supervisors approving it
-— runs the `img onerror` handler. The handler reads `document.cookie` (because no
+exam (clinicians reviewing the record, administrators auditing it, supervisors approving it)
+runs the `img onerror` handler. The handler reads `document.cookie` (because no
 `HttpOnly`), packages the session cookie, and ships it to the attacker's webhook.
 
 The attacker imports the token, replays it against the API, and operates as whichever
@@ -108,7 +108,7 @@ victim's session arrived first.
 
 ### A second sink, just for completeness
 
-While auditing the chain I found a second sink for the same bypass-tainted data — a
+While auditing the chain I found a second sink for the same bypass-tainted data: a
 different component using `Renderer2.setProperty(el, 'innerHTML', ...)` rather than the
 template `[innerHTML]` binding:
 
@@ -118,12 +118,12 @@ this.renderer.setProperty(this.el.nativeElement, 'innerHTML', report);
 ```
 
 Patching only the template binding without patching the renderer call would have left the
-chain intact — same payload, different control path to the DOM. The lesson, repeated:
+chain intact: same payload, different control path to the DOM. The lesson, repeated:
 sanitisation has to live at the *source* of the trust decision, not at every consumer.
 
 ## Why severity rolls up to Critical
 
-Scored individually, each finding lands in the High band — XSS is High, missing `HttpOnly`
+Scored individually, each finding lands in the High band: XSS is High, missing `HttpOnly`
 on a session cookie is High. The CVSS rollup for the chain on a HIPAA-scope application is:
 
 ```
@@ -131,7 +131,7 @@ CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:N  = 9.0
 ```
 
 The Scope=Changed propagates because the XSS payload exfiltrates a session that grants
-access to other user accounts — including administrators with broader privileges than the
+access to other user accounts, including administrators with broader privileges than the
 attacker started with. The `User Interaction = None` is the property that *really* drives
 the severity: a clinician opening a patient record in the normal flow of their workday is
 not interacting with anything they wouldn't normally interact with. The payload fires
@@ -151,14 +151,14 @@ The three things, in the order they should land:
 Wherever the bypass exists today, replace it with `this.sanitizer.sanitize(SecurityContext.HTML, value)`:
 
 ```typescript
-// reports.service.ts — corrected
+// reports.service.ts - corrected
 sanitizeHtml(text: string): string {
   return this.sanitizer.sanitize(SecurityContext.HTML, text) ?? '';
 }
 ```
 
 The default sanitiser strips dangerous content but preserves benign formatting. The
-product-team's reason for opting out — wanting bold/italic/lists — is met by the default.
+product-team's reason for opting out, wanting bold/italic/lists, is met by the default.
 If a richer subset is genuinely required (tables, links with specific attributes),
 introduce DOMPurify with a tight allow-list and serve the DOMPurify-cleaned string through
 the default sanitiser. Don't bypass.
@@ -168,7 +168,7 @@ the default sanitiser. Don't bypass.
 The renderer-call sink needs its own treatment:
 
 ```typescript
-// history.component.ts — corrected
+// history.component.ts - corrected
 this.renderer.setProperty(this.el.nativeElement, 'textContent', report);
 ```
 
@@ -187,7 +187,7 @@ res.cookie('session', token, {
 });
 ```
 
-The combination — `HttpOnly` plus `Secure` plus `SameSite` — is what neuters the chain
+The combination, `HttpOnly` plus `Secure` plus `SameSite`, is what neuters the chain
 even if a future XSS slips through. Defence in depth: a successful XSS on the page should
 not be a successful session theft.
 
@@ -203,13 +203,13 @@ them lives in the browser.
 Three queries, in decreasing order of certainty:
 
 ```bash
-# Direct calls — almost always a finding.
+# Direct calls - almost always a finding.
 grep -rn 'bypassSecurityTrustHtml\|bypassSecurityTrustScript\|bypassSecurityTrustResourceUrl' .
 
-# Indirect — every `[innerHTML]` binding deserves a look.
+# Indirect - every `[innerHTML]` binding deserves a look.
 grep -rn '\[innerHTML\]' .
 
-# Sneakier — Renderer2 setProperty for innerHTML.
+# Sneakier - Renderer2 setProperty for innerHTML.
 grep -rn "setProperty.*innerHTML" .
 ```
 
