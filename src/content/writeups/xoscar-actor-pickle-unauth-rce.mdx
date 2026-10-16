@@ -1,0 +1,151 @@
+---
+title: "Xoscar: Unauthenticated RCE via Actor-Message Pickle Deserialization"
+summary: "Xoscar is the actor framework underneath Xinference and Xorbits. Every actor message is reconstructed with cloudpickle before any actor-level handling runs, and the transport had no authentication, so anyone who can reach an actor-pool port can send a crafted message and execute arbitrary Python in the pool process. Unauthenticated, no user interaction, code execution with the pool's privileges."
+date: 2026-10-16
+severity: Critical
+cvss: 9.3
+cve: "CVE-2026-49950"
+ghsa: "GHSA-mmvj-m246-m9vf"
+cwe: "CWE-502"
+product: "xoscar"
+version: ">= 0.1.0, <= 0.12.0"
+vendor: "xorbitsai/xoscar"
+status: "Coordinated"
+ecosystem: "PyPI"
+fixedIn: "0.12.0 (opt-in authentication; not automatic)"
+cvssVector: "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N"
+tags: ["rce", "deserialization", "pickle", "python", "actor-model", "xinference", "cwe-502"]
+advisory: "https://github.com/xorbitsai/xoscar/security/advisories/GHSA-mmvj-m246-m9vf"
+order: 1
+featured: true
+type: "Disclosure"
+readingTime: 6
+---
+
+[Xoscar](https://github.com/xorbitsai/xoscar) is a Python actor framework. You rarely install it
+on purpose, but you almost certainly run it: it is the distributed-execution core under
+[Xinference](https://github.com/xorbitsai/inference) (a popular model-serving platform) and
+[Xorbits](https://github.com/xorbitsai/xorbits). Actors live in actor pools, pools talk to each
+other over a socket or UCX transport, and the whole thing is designed to scale a job across many
+processes and hosts.
+
+Every message those actors exchange is serialized with `cloudpickle`. On the receiving side the
+framework calls `cloudpickle.loads` to rebuild the message, including its header and its payload
+buffers, **before** any actor-level routing or handling decides whether the message is even
+legitimate. For the entire 0.1.0 through 0.11.2 line there was no authentication on the
+transport at all. So if you can open a TCP connection to an actor-pool port, you can hand it a
+pickle, and `cloudpickle.loads` will faithfully reconstruct whatever you sent, including the
+parts of a pickle that run code.
+
+This is [GHSA-mmvj-m246-m9vf](https://github.com/xorbitsai/xoscar/security/advisories/GHSA-mmvj-m246-m9vf)
+/ **CVE-2026-49950**, CWE-502, CVSS v4 **9.3 Critical**
+(`AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H`). Unauthenticated, network-reachable, no user
+interaction, high impact across confidentiality, integrity, and availability. Affected range:
+`>= 0.1.0, <= 0.12.0`. I reported it; it was coordinated with the maintainer (qinxuye).
+
+## Why pickle is a code-execution primitive
+
+This is the part people underrate. `pickle` (and `cloudpickle`, which extends it) is not a data
+format, it is a tiny stack VM, and an object controls its own reconstruction through
+`__reduce__`. A one-line gadget is the whole story:
+
+```python
+import os
+import pickle
+
+class Exploit:
+    def __reduce__(self):
+        # Whatever this returns is called at load time.
+        return (os.system, ("id > /tmp/pwned",))
+
+payload = pickle.dumps(Exploit())
+# On the victim, the instant this runs, so does `id > /tmp/pwned`:
+pickle.loads(payload)
+```
+
+There is no "parse then validate" step you can bolt on afterwards. The code runs *during*
+`loads`, as the object is rebuilt. Any system that calls `pickle.loads` / `cloudpickle.loads`
+on bytes an attacker can influence has already lost; the only real defense is to never
+deserialize untrusted input.
+
+## Where Xoscar does it
+
+The sink is the actor communication layer: `serialization/aio.py` and the pickle serializer in
+`serialization/core.pyx`, exercised by both the Socket and the UCX backends. A message arrives,
+the framing is read, and the header and payload are reconstructed with `cloudpickle.loads` to
+turn the wire bytes back into live Python objects. Only after that would normal actor logic look
+at the message. By then the gadget has already fired.
+
+Two details make it worse than the usual "do not unpickle untrusted data":
+
+- **Both the header and the payload buffers carry executable objects.** An early instinct is to
+  authenticate or sanitize only the small header and trust the payload, or vice versa. That is
+  not enough here: a reduce gadget placed in a payload buffer deserializes just the same. You
+  have to cover the complete message, every buffer, or you have covered nothing.
+- **The transport was unauthenticated by default.** There was no shared secret, no signature, no
+  peer check. Reaching the port was the only precondition.
+
+The attack shape is therefore blunt: find an exposed actor-pool port, frame a message whose
+header or payload is a pickle of a reduce gadget, send it, and the pool process runs your code.
+I am deliberately not publishing the exact wire framing needed to weaponize it, because the
+class is textbook and the point is the design, not a copy-paste tool.
+
+## What it actually reaches
+
+Code runs with the privileges of the actor-pool process. In the deployments that matter that is
+not a sandbox, it is a Xinference or Xorbits worker that can see model artifacts, application
+data, API tokens and cloud credentials in its environment, and other hosts in the cluster. An
+unauthenticated port plus a 20-line script is enough to go from network reachability to code
+execution to lateral movement. The usual exposure is an actor-pool port that someone assumed was
+"internal only" and bound to `0.0.0.0`, or a worker reachable across a flat network segment.
+
+## The fix, and why upgrading alone does not do it
+
+Version **0.12.0** introduces the mechanism to close this: opt-in message authentication using
+**HMAC-SHA256** over the framing metadata and the complete message, including every payload
+buffer, and it verifies UCX raw buffers before they are written into application memory. Signed,
+whole-message, pre-deserialization. That is the correct shape.
+
+The sharp edge is that it is **opt-in**, and there is no release that secures the legacy mode
+automatically:
+
+- `0.1.0` to `0.11.2`: no authentication, always exposed.
+- `0.12.0` with `XOSCAR_AUTH_KEY` unset or empty: the legacy unauthenticated transport is still
+  live, so you are still exposed even though you "upgraded".
+- `0.12.0` with a strong, nonempty, shared `XOSCAR_AUTH_KEY` set on **every** communicating
+  process: messages are authenticated before deserialization, and the attack is closed.
+
+So the remediation is a procedure, not a `pip install -U`:
+
+1. Upgrade every component (Xoscar, and anything built on it like Xinference/Xorbits) to `0.12.0`.
+2. Generate one random key and set the same `XOSCAR_AUTH_KEY` on every process that talks to the
+   pool.
+3. Restart all communicating processes together. There is no safe mixed-mode rolling upgrade: a
+   process that still speaks the legacy transport reopens the hole for everyone it talks to.
+4. Restrict actor-pool ports to intended peers with a firewall or network policy.
+
+Two caveats worth stating plainly, because they trip people up:
+
+- Anyone holding the shared key is a fully trusted peer with Python execution rights. The key is
+  a cluster-wide credential, treat it like one.
+- Authentication is not encryption. It stops forged and tampered messages; it does not hide
+  traffic or stop replay. If you need confidentiality or anti-replay, run it inside an encrypted
+  tunnel.
+
+If you cannot enable authentication yet, the only honest interim control is network isolation:
+firewall the actor-pool ports down to known peers and treat any host that can reach them as
+already holding Python execution on your workers.
+
+## Takeaways
+
+- `cloudpickle.loads` on anything an attacker can reach is remote code execution. Full stop. The
+  actor-message path ran it before authentication existed, which is the whole bug.
+- Partial coverage is no coverage: header-only or payload-only protection fails when both can
+  carry a gadget. Authenticate the entire message, every buffer, before you deserialize.
+- "Upgrade to the fixed version" is not always a fix. When the safe mode is opt-in, the advisory
+  is a runbook, not a version bump, and dashboards that only track installed versions will report
+  green while you are still wide open.
+
+Advisory:
+[GHSA-mmvj-m246-m9vf](https://github.com/xorbitsai/xoscar/security/advisories/GHSA-mmvj-m246-m9vf)
+/ CVE-2026-49950. Reported by me, coordinated with the Xorbits maintainers.
