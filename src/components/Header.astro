@@ -80,6 +80,8 @@ const nav = [
     clearTimeout(switching);
     switching = setTimeout(() => root.classList.remove('theme-switching'), 350);
     root.dataset.theme = next;
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', next === 'light' ? '#f7f7f5' : '#0a0a0c');
     try {
       localStorage.setItem('theme', next);
     } catch {}

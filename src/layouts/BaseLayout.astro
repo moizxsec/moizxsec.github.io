@@ -66,6 +66,9 @@ const ogImage = new URL('/images/profile.jpg', Astro.site).toString();
         try {
           var t = localStorage.getItem('theme');
           if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+          var active = document.documentElement.dataset.theme;
+          var m = document.querySelector('meta[name="theme-color"]');
+          if (m) m.setAttribute('content', active === 'light' ? '#f7f7f5' : '#0a0a0c');
         } catch (e) {}
       })();
     </script>
