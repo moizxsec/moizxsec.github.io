@@ -146,7 +146,7 @@ Then I tried to report it, and ran into the other half of the story.
   writeup.
 
 With every vendor channel exhausted by project abandonment, there was no one left to fix the
-code — so the disclosure was coordinated through CERT/CC rather than left to the vendor. The
+code, so the disclosure was coordinated through CERT/CC rather than left to the vendor. The
 failed contact attempt is documented above, and the rest of the post is the root cause, a proof
 of concept, and, since the package cannot be patched at the source, mitigation guidance that
 dependents can apply themselves.
@@ -219,9 +219,9 @@ Since there is no patched version, the dependency is the finding. In rough order
 
 ## References
 
-- **CVE-2026-107709** — [CVE record (cve.org)](https://www.cve.org/CVERecord?id=CVE-2026-107709)
+- **CVE-2026-107709**: [CVE record (cve.org)](https://www.cve.org/CVERecord?id=CVE-2026-107709)
   · [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-107709) (assigned by CERT/CC, published 2026-10-08)
-- **CERT/CC VINCE** — coordination case **VU#987362**
+- **CERT/CC VINCE**: coordination case **VU#987362**
 - [`decompress-zip` on npm](https://www.npmjs.com/package/decompress-zip) · [source: `bower/decompress-zip`](https://github.com/bower/decompress-zip)
 - [CWE-22: Improper Limitation of a Pathname to a Restricted Directory ("Path Traversal")](https://cwe.mitre.org/data/definitions/22.html)
 - Related: [unzipper sibling-prefix bypass](/writeups/unzipper-zip-slip-sibling-prefix-bypass)

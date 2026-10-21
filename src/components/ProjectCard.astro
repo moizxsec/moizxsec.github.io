@@ -1,0 +1,66 @@
+---
+import StatusBadge from './StatusBadge.astro';
+import { projectLinks, type Project } from '../lib/projects';
+
+interface Props {
+  entry: Project;
+  /** Featured cards carry the accent bar and show a tighter highlight set. */
+  featured?: boolean;
+}
+
+const { entry, featured = false } = Astro.props;
+const d = entry.data;
+const href = `/projects/${entry.slug}/`;
+const links = projectLinks(entry);
+const highlights = d.highlights.slice(0, featured ? 6 : 10);
+---
+
+<article class="project-card reveal panel relative p-5 sm:p-6">
+  {featured && <span class="absolute left-0 top-5 bottom-5 w-[2px] bg-accent" aria-hidden="true"></span>}
+
+  <div class="flex items-center gap-x-2.5 gap-y-1.5 mb-3 font-mono text-xs text-faint flex-wrap">
+    <span class="chip">{d.role}</span>
+    {d.language && <span class="text-muted">{d.language}</span>}
+    {d.license && <span class="text-muted">{d.license}</span>}
+    <span class="ml-auto"><StatusBadge status={d.status} /></span>
+  </div>
+
+  <h3 class="text-lg sm:text-xl font-semibold text-fg tracking-tight leading-snug break-words">
+    <a href={href} class="hover:text-accent transition-colors">{d.title}</a>
+  </h3>
+  <p class="mt-1 font-mono text-xs text-accent break-words">{d.tagline}</p>
+  <p class="mt-3 text-sm text-muted leading-relaxed">{d.summary}</p>
+
+  {
+    highlights.length > 0 && (
+      <ul class="mt-4 flex flex-wrap gap-1.5" aria-label="Highlights">
+        {highlights.map((h) => (
+          <li class="chip normal-case tracking-normal">{h}</li>
+        ))}
+      </ul>
+    )
+  }
+
+  {
+    d.stack.length > 0 && (
+      <ul class="mt-3 flex flex-wrap gap-x-3 gap-y-1 font-mono text-2xs text-faint" aria-label="Stack">
+        {d.stack.map((s) => (
+          <li>{s}</li>
+        ))}
+      </ul>
+    )
+  }
+
+  <div class="mt-5 flex flex-wrap items-center gap-2">
+    {
+      links.map((l) => (
+        <a href={l.href} target="_blank" rel="noopener" class="btn-ghost">
+          {l.label} <span aria-hidden="true">↗</span>
+        </a>
+      ))
+    }
+    <a href={href} class="arrow-link ml-auto font-mono text-xs text-muted hover:text-fg transition-colors">
+      details <span aria-hidden="true">→</span>
+    </a>
+  </div>
+</article>

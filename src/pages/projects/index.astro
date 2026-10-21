@@ -1,0 +1,37 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import ProjectCard from '../../components/ProjectCard.astro';
+import { SITE } from '../../lib/writeups';
+import { getProjects } from '../../lib/projects';
+
+const projects = await getProjects();
+---
+
+<BaseLayout
+  title={`Projects | ${SITE.handle}`}
+  description={`Open-source security tools built and maintained by ${SITE.name}, including mcpwn, an interception proxy, scanner, and guard for Model Context Protocol traffic.`}
+>
+  <div class="max-w-site mx-auto px-4 sm:px-6 pt-12 sm:pt-16 pb-16">
+    <header class="mb-10 max-w-3xl">
+      <p class="label text-accent mb-4">// open-source tooling</p>
+      <h1 class="text-3xl sm:text-4xl font-semibold text-fg tracking-tight mb-4">Projects</h1>
+      <p class="text-muted leading-relaxed">
+        Security tools I build and maintain in the open. Offensive by design, built to prove a
+        weakness before someone else does, and to give defenders something to run against their own
+        systems first.
+      </p>
+    </header>
+
+    {
+      projects.length === 0 ? (
+        <p class="font-mono text-sm text-faint py-6">No public projects yet.</p>
+      ) : (
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          {projects.map((p) => (
+            <ProjectCard entry={p} featured={p.data.featured} />
+          ))}
+        </div>
+      )
+    }
+  </div>
+</BaseLayout>

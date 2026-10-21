@@ -3,7 +3,9 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 import AdvisoryTable from '../components/AdvisoryTable.astro';
 import SectionHeading from '../components/SectionHeading.astro';
 import WriteupCard from '../components/WriteupCard.astro';
+import ProjectCard from '../components/ProjectCard.astro';
 import Portrait from '../components/Portrait.astro';
+import { getFeaturedProject, getProjects } from '../lib/projects';
 import {
   SITE,
   TYPE_BLURB,
@@ -17,6 +19,8 @@ import {
 
 const all = await getPublished();
 const advisories = await getAdvisories();
+const projects = await getProjects();
+const featuredProject = await getFeaturedProject();
 const s = stats(all);
 
 // Everything that is not already on the advisory board, grouped by type.
@@ -128,9 +132,23 @@ const focus = [
       <AdvisoryTable advisories={advisories} limit={8} />
     </section>
 
+    <!-- OPEN-SOURCE TOOLING -->
+    {
+      featuredProject && (
+        <section class="pt-16 sm:pt-20" aria-labelledby="projects">
+          <SectionHeading index="02" title="Open-source tooling" id="projects" href="/projects/" count={projects.length} />
+          <p class="text-sm text-muted leading-relaxed max-w-2xl mb-6">
+            Security tools I build and maintain in the open. Offensive by design, built to prove a
+            weakness before someone else does, and to give defenders something to run first.
+          </p>
+          <ProjectCard entry={featuredProject} featured />
+        </section>
+      )
+    }
+
     <!-- WRITEUPS BY TYPE -->
     <section class="pt-16 sm:pt-20" aria-labelledby="writeups">
-      <SectionHeading index="02" title="Research & writeups" id="writeups" href="/writeups/" count={rest.length} />
+      <SectionHeading index="03" title="Research & writeups" id="writeups" href="/writeups/" count={rest.length} />
       <div class="grid grid-cols-1 lg:grid-cols-[14rem_minmax(0,1fr)] gap-8 lg:gap-12">
         <nav class="lg:sticky lg:top-20 lg:self-start" aria-label="Writeup types">
           <ul class="flex lg:flex-col flex-wrap gap-2 lg:gap-1">
@@ -178,7 +196,7 @@ const focus = [
 
     <!-- FOCUS + CONTACT -->
     <section class="pt-16 sm:pt-20" aria-labelledby="focus">
-      <SectionHeading index="03" title="Focus" id="focus" href="/about/" linkLabel="about" />
+      <SectionHeading index="04" title="Focus" id="focus" href="/about/" linkLabel="about" />
       <div class="grid grid-cols-1 md:grid-cols-2 gap-px bg-line border border-line rounded-md overflow-hidden">
         {
           focus.map(([k, v]) => (

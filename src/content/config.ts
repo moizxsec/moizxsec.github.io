@@ -29,4 +29,28 @@ const writeups = defineCollection({
   }),
 });
 
-export const collections = { writeups };
+const projects = defineCollection({
+  type: 'content',
+  schema: z.object({
+    title: z.string(),
+    tagline: z.string(),
+    summary: z.string(),
+    date: z.coerce.date(),
+    status: z.enum(['Published', 'Active', 'Archived']).default('Active'),
+    role: z.string().default('Author'),
+    stack: z.array(z.string()).default([]),
+    highlights: z.array(z.string()).default([]),
+    repo: z.string().url(),
+    npm: z.string().url().optional(),
+    docs: z.string().url().optional(),
+    marketplace: z.string().url().optional(),
+    language: z.string().optional(),
+    license: z.string().optional(),
+    tags: z.array(z.string()).default([]),
+    draft: z.boolean().default(false),
+    featured: z.boolean().default(false),
+    order: z.number().default(100),
+  }),
+});
+
+export const collections = { writeups, projects };

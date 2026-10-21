@@ -1,0 +1,79 @@
+---
+title: "mcpwn"
+tagline: "An interception proxy, scanner, and guard for Model Context Protocol (MCP) traffic."
+summary: "mcpwn sits on the wire between an AI agent and its MCP servers. It is a stdio and HTTP man-in-the-middle proxy, a self-driving scanner, and a defensive guard, built to find and demonstrate indirect prompt injection, tool poisoning, rug pulls, sampling abuse, and data exfiltration. Sometimes described as Burp Suite for AI agents."
+date: 2026-10-21
+status: "Published"
+role: "Author"
+language: "TypeScript"
+license: "MIT"
+stack: ["TypeScript", "Node >= 18", "ESM", "Zero runtime dependencies"]
+highlights:
+  - "stdio + HTTP MITM proxy"
+  - "Live intercept and tamper"
+  - "Agent-free active scanner"
+  - "Guard firewall, fail-open"
+  - "SARIF + CI gating"
+  - "CVSS v3.1 + CWE advisories"
+  - "Damn-Vulnerable-MCP suite"
+  - "GitHub Action"
+repo: "https://github.com/moizxsec/mcpwn"
+npm: "https://www.npmjs.com/package/@moizxsec/mcpwn"
+docs: "https://moizxsec.github.io/mcpwn"
+marketplace: "https://github.com/marketplace/actions/mcpwn-mcp-security-scan"
+tags: ["mcp", "ai-security", "prompt-injection", "proxy", "scanner", "appsec"]
+featured: true
+order: 1
+---
+
+## What it is
+
+mcpwn is tooling for the Model Context Protocol, the wire that connects AI agents to the
+tools, files, and data they act on. It operates in three modes against the same traffic:
+
+- **Proxy.** A man-in-the-middle for stdio and HTTP MCP transports. It logs every JSON-RPC
+  message and lets you hold, drop, edit, or tamper with messages in flight, including the
+  tool results a server sends back to the agent. This is the Repeater-style loop a tester
+  reaches for during a live session.
+- **Scanner.** An agent-free active scanner. It enumerates a server's tools, exercises them
+  with attack cases, and reports findings as SARIF with CVSS v3.1 scores and CWE mappings.
+  It gates CI and ships as a GitHub Action.
+- **Guard.** A defensive firewall that sanitises or blocks malicious content before it
+  reaches the agent. It fails open, so a guard outage never takes the agent down with it.
+
+## Why MCP security matters
+
+MCP is becoming the default integration layer for agents. The moment an agent reads a tool
+result, that result is untrusted input sitting in the agent's context. An attacker who
+controls any upstream source, a file, a web page, or a connected server, can plant
+instructions the agent will follow: indirect prompt injection, tool poisoning,
+confused-deputy calls, and data exfiltration. mcpwn exists to prove your own agent will do
+this before someone else proves it for you.
+
+## Capabilities
+
+**Offense.** Live intercept and tamper, passive detectors, provenance taint tracking, and a
+plugin plus nuclei-style template gallery for reusable attack cases. The scanner runs
+without driving a real model, so results are deterministic and cheap to reproduce.
+
+**Defense.** Guard mode sanitises or blocks malicious content and pins server behaviour to
+catch rug pulls, where a server quietly changes a tool definition after it has been trusted.
+
+**Reporting.** HTML advisory reports, SARIF output, and advisories carrying CVSS v3.1 vectors
+and CWE identifiers, so findings land in the formats a security programme already consumes.
+
+**Coverage and rigour.** A bundled Damn-Vulnerable-MCP benchmark suite, protocol `diff` and
+`conformance` checks, and an agent-susceptibility `eval` that measures how a given client
+behaves under attack.
+
+## Using it
+
+Install from npm, wrap a client with `mcpwn init` or `mcpwn wrap`, or run the scanner in CI
+through the GitHub Action. It targets Node 18 and above, is written in TypeScript as pure
+ESM, and ships with zero runtime dependencies. 381 tests run on Node 18, 20, and 22 plus
+Windows. Published under MIT.
+
+Links: [repository](https://github.com/moizxsec/mcpwn),
+[npm](https://www.npmjs.com/package/@moizxsec/mcpwn),
+[documentation](https://moizxsec.github.io/mcpwn), and the
+[GitHub Marketplace Action](https://github.com/marketplace/actions/mcpwn-mcp-security-scan).
