@@ -4,11 +4,12 @@ summary: "decompress-zip was patched for classic ../../ Zip Slip back in 0.3.2. 
 date: 2026-10-04
 severity: High
 cvss: 8.1
+cve: "CVE-2026-107709"
 cwe: "CWE-22"
 product: "decompress-zip"
 version: "≤ 0.3.3 (no fix available)"
 vendor: "bower/decompress-zip"
-status: "Public"
+status: "Coordinated"
 ecosystem: "npm"
 cvssVector: "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:H/A:H"
 tags: ["zip-slip", "path-traversal", "arbitrary-file-write", "javascript", "npm", "supply-chain", "abandoned-package", "responsible-disclosure", "cwe-22"]
@@ -136,10 +137,19 @@ Then I tried to report it, and ran into the other half of the story.
   years, private vulnerability reporting is not enabled, and there is no `SECURITY.md` or any
   other disclosed channel.
 
-With every vendor channel exhausted by project abandonment, there is no one left to fix the
-code. This writeup is therefore a public disclosure: the failed contact attempt is documented
-above, and the rest of the post is the root cause, a proof of concept, and, since the package
-cannot be patched at the source, mitigation guidance that dependents can apply themselves.
+- **2026-06-08.** With no working vendor channel, I reported the issue to **CERT/CC** through
+  [VINCE](https://kb.cert.org/), opened as case **VU#987362**. CERT/CC independently tried to
+  reach the party that had taken over support for the package; that outreach also went unanswered.
+
+- **2026-10-08.** With the vendor unreachable, CERT/CC coordinated public disclosure and assigned
+  [**CVE-2026-107709**](https://www.cve.org/CVERecord?id=CVE-2026-107709), published alongside this
+  writeup.
+
+With every vendor channel exhausted by project abandonment, there was no one left to fix the
+code — so the disclosure was coordinated through CERT/CC rather than left to the vendor. The
+failed contact attempt is documented above, and the rest of the post is the root cause, a proof
+of concept, and, since the package cannot be patched at the source, mitigation guidance that
+dependents can apply themselves.
 
 ## The fix (that the project will not ship)
 
@@ -188,6 +198,8 @@ Since there is no patched version, the dependency is the finding. In rough order
 | ------------ | ----------------------------------------------------------------------------------------- |
 | 2026-06      | Found during manual review of `decompress-zip` 0.3.3; prefix-sibling PoC confirmed.        |
 | 2026-06-03   | Vendor contact attempted (`team@bower.io`); permanent bounce, project confirmed abandoned. |
+| 2026-06-08   | Reported to CERT/CC via VINCE (Case **VU#987362**).                                        |
+| 2026-10-08   | **CVE-2026-107709** published by CERT/CC, coordinated with this writeup.                   |
 | 2026-10      | Public disclosure with mitigation guidance, the vendor being unreachable and the package unmaintained. |
 
 ## Takeaways
@@ -204,3 +216,12 @@ Since there is no patched version, the dependency is the finding. In rough order
 - **Disclosure still works when the vendor is gone.** Dead mailbox, dead repo, no `SECURITY.md`.
   Document the good-faith contact attempt, then publish the root cause with mitigations so
   defenders can act even though the source never will.
+
+## References
+
+- **CVE-2026-107709** — [CVE record (cve.org)](https://www.cve.org/CVERecord?id=CVE-2026-107709)
+  · [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-107709) (assigned by CERT/CC, published 2026-10-08)
+- **CERT/CC VINCE** — coordination case **VU#987362**
+- [`decompress-zip` on npm](https://www.npmjs.com/package/decompress-zip) · [source: `bower/decompress-zip`](https://github.com/bower/decompress-zip)
+- [CWE-22: Improper Limitation of a Pathname to a Restricted Directory ("Path Traversal")](https://cwe.mitre.org/data/definitions/22.html)
+- Related: [unzipper sibling-prefix bypass](/writeups/unzipper-zip-slip-sibling-prefix-bypass)
