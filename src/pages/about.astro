@@ -49,6 +49,18 @@ const s = stats(await getPublished());
             <li>LLM / agent security: prompt-injection defense, dual-LLM cascades, automated CVE triage</li>
           </ul>
 
+          <h2 id="open-source-contributions">Open source contributions</h2>
+          <ul>
+            <li>
+              <strong><a href="https://github.com/fortra/impacket/pull/2206" target="_blank" rel="noopener">fortra/impacket</a></strong> &mdash; #2206, merged June&nbsp;2026.
+              Fixed duplicate interface-UUID keys in <code>epm.KNOWN_PROTOCOLS</code> (<code>impacket/dcerpc/v5/epm.py</code>): two entries shared a key, so the later one shadowed the first and lookups returned the wrong protocol name. Corrected the entries and added a regression test in <code>tests/dcerpc/test_epm.py</code>. Closes fortra/impacket#2126.
+            </li>
+            <li>
+              <strong><a href="https://github.com/projectdiscovery/nuclei-templates/pull/17348" target="_blank" rel="noopener">projectdiscovery/nuclei-templates</a></strong> &mdash; #17348, merged October&nbsp;2026.
+              Authored the Nuclei detection template for CVE-2026-63358 (FileGator), a vulnerability I am credited on. Ships in the default template distribution (<code>http/cves/2026/</code>).
+            </li>
+          </ul>
+
           <h2 id="how-to-reach-me">How to reach me</h2>
           <p>
             Email is the most reliable channel. For coordinated disclosure, please use my email and
